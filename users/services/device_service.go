@@ -28,11 +28,11 @@ type DeviceFingerprint struct {
 	Canvas        string `json:"canvas_fingerprint"`
 	WebGL         string `json:"webgl_fingerprint"`
 
-	// Additional stable identifiers
-	ColorDepth          int `json:"color_depth"`
-	HardwareConcurrency int `json:"hardware_concurrency"` // CPU cores
-	DeviceMemory        int `json:"device_memory"`        // Available RAM (if supported)
-	MaxTouchPoints      int `json:"max_touch_points"`
+	// Additional stable identifiers - KEEP AS STRING FOR FRACTIONAL VALUES
+	ColorDepth          int     `json:"color_depth"`
+	HardwareConcurrency int     `json:"hardware_concurrency"` // CPU cores
+	DeviceMemory        float64 `json:"device_memory"`        // Available RAM (kept as string to handle fractional GB like "0.5")
+	MaxTouchPoints      int     `json:"max_touch_points"`
 }
 
 type TrustedDevice struct {
