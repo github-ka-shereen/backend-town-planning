@@ -1,0 +1,30 @@
+# Ignore the Git directory
+.git/
+
+# Ignore the Bleve index data (crucial for persistent volumes)
+bleve_data/
+
+# Ignore local environment variables (you'll pass these via Docker environment or secrets)
+# .env
+
+# Ignore compiled binaries generated locally
+*.exe
+*.out
+*.bin # If you have a 'bin' directory for binaries
+my_app_binary # Replace with the actual name of your compiled Go executable
+
+# Go-specific ignores
+*.test
+vendor/       # If you're managing dependencies locally and not using Go Modules' vendor mode in Docker
+Godeps/       # Older dependency management system
+tmp/          # Temporary files
+logs/         # Application logs (should go to Docker logs or an external logging solution)
+public/       # Only if you are serving static files *outside* the container,
+              # otherwise, you typically *do* want to copy these.
+              # Based on your main.go, you're serving /public, so you'd generally want this.
+uploads/      # User uploads (should be stored in volumes, not in the image)
+
+# IDE/Editor specific files
+.vscode/ # Visual Studio Code settings
+.idea/   # IntelliJ IDEA settings
+.DS_Store # macOS specific

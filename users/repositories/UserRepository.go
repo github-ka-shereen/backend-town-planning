@@ -1,0 +1,173 @@
+package repositories
+
+import (
+	"errors"
+	"fmt"
+	"time"
+	"town-planning-backend/db/models"
+
+	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
+)
+
+type UserRepository interface {
+	CreateUser(user *models.User) (*models.User, error)
+	GetUserByID(id string) (*models.User, error)
+	GetUserByPhoneNumber(phone string) (*models.User, error)
+	GetUserByEmail(email string) (*models.User, error)
+	UpdateUser(user *models.User) (*models.User, error)
+	DeleteUser(id string) error
+	GetAllUsers() ([]models.User, error)
+	GetFilteredUsers(role, startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
+}
+
+// Implementations
+type userRepository struct {
+	db *gorm.DB
+}
+
+func NewUserRepository(db *gorm.DB) UserRepository {
+	return &userRepository{db: db}
+}
+
+func HashPassword(password string) (string, error) {
+	bytes, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	return string(bytes), err
+}
+
+func CheckPasswordHash(password, hash string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(password))
+	return err == nil
+}
+
+func (r *userRepository) GetFilteredUsers(role, startDate, endDate string, pageSize, page int) ([]models.User, int64, error) {
+	var users []models.User
+	var totalResults int64
+
+	query := r.db.Model(&models.User{}).
+		Select("id, first_name, last_name, email, phone, role, active, created_at, updated_at")
+
+	// Add role filter if provided
+	if role != "" {
+		query = query.Where("role = ?", role)
+	}
+
+	// Add date range filter if both dates are provided
+	if startDate != "" && endDate != "" {
+		// Parse the end date and add one day to include the entire end date
+		endDateParsed, err := time.Parse("2006-01-02", endDate)
+		if err == nil {
+			endDatePlusOne := endDateParsed.Add(24 * time.Hour)
+			query = query.Where("created_at >= ? AND created_at < ?", startDate, endDatePlusOne.Format("2006-01-02"))
+		}
+	}
+
+	// Get total count before pagination
+	if err := query.Count(&totalResults).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply pagination
+	offset := (page - 1) * pageSize
+	err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&users).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return users, totalResults, nil
+}
+
+func (r *userRepository) CreateUser(user *models.User) (*models.User, error) {
+	// Hash password
+	hashedPassword, err := HashPassword(user.Password)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	// Check if user exists (including soft-deleted)
+	var existing models.User
+	err = r.db.Unscoped().Where("email = ?", user.Email).First(&existing).Error
+	if err == nil {
+		// Email found
+		if existing.DeletedAt.Valid {
+			// Soft-deleted: restore
+			existing.DeletedAt = gorm.DeletedAt{}
+			existing.FirstName = user.FirstName
+			existing.LastName = user.LastName
+			existing.Password = hashedPassword
+			existing.Phone = user.Phone
+			existing.Role = user.Role
+			existing.Active = user.Active
+			existing.CreatedBy = user.CreatedBy
+
+			if err := r.db.Unscoped().Save(&existing).Error; err != nil {
+				return nil, fmt.Errorf("failed to restore soft-deleted user: %w", err)
+			}
+			return &existing, nil
+		} else {
+			// Active user with same email already exists
+			return nil, fmt.Errorf("a user with that email already exists")
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Unexpected DB error
+		return nil, fmt.Errorf("failed to check for existing user: %w", err)
+	}
+
+	// Create a new user
+	user.ID = uuid.New()
+	user.Password = hashedPassword
+
+	if err := r.db.Create(user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user in database: %w", err)
+	}
+
+	return user, nil
+}
+
+func (r *userRepository) GetUserByID(id string) (*models.User, error) {
+	var user models.User
+	err := r.db.First(&user, "id = ?", id).Error
+	if user.Active == nil || !*user.Active || user.IsSuspended {
+		return nil, fmt.Errorf("user account is disabled")
+	}
+	return &user, err
+}
+
+func (r *userRepository) GetUserByPhoneNumber(phone string) (*models.User, error) {
+	var user models.User
+	err := r.db.First(&user, "phone = ?", phone).Error
+	return &user, err
+}
+
+func (r *userRepository) GetUserByEmail(email string) (*models.User, error) {
+	var user models.User
+	err := r.db.First(&user, "email = ?", email).Error
+	return &user, err
+}
+
+func (r *userRepository) GetUsers() ([]models.User, error) {
+	var users []models.User
+	err := r.db.Find(&users).Error
+	return users, err
+}
+
+func (r *userRepository) UpdateUser(user *models.User) (*models.User, error) {
+	result := r.db.Save(user)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	// After saving, the 'user' object should have the updated values.
+	// We can directly return it. GORM updates the fields in the passed-in struct.
+	return user, nil
+}
+
+func (r *userRepository) GetAllUsers() ([]models.User, error) {
+	var users []models.User
+	err := r.db.Find(&users).Error
+	return users, err
+}
+
+func (r *userRepository) DeleteUser(id string) error {
+	return r.db.Delete(&models.User{}, "id = ?", id).Error
+}

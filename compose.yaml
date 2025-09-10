@@ -1,0 +1,53 @@
+name: town-planning
+
+services:
+  # town-planning-server:
+  #   build:
+  #     context: .
+  #     target: final
+  #   restart: always
+  #   volumes:
+  #     - ./public/files:/app/public/files
+  #   ports:
+  #     - '8080:8080'
+  #   depends_on:
+  #     - town-planning-db
+  #     - town-planning-redis
+  #     - town-planning-mailhog
+  #   env_file:
+  #     - .env
+  #   environment:
+  #     PORT: 8080
+  #     DB_HOST: town-planning-db
+  #     DB_PORT: 5432
+  #     REDIS_ADDRESS: town-planning-redis:6379
+
+  town-planning-db:
+    image: postgres:15-alpine
+    restart: always
+    volumes:
+      - town-planning-pgdata:/var/lib/postgresql/data
+    ports:
+      - '5434:5432'
+    env_file:
+      - .env
+
+  town-planning-redis:
+    restart: always
+    image: redis:7.0.8-alpine
+    ports:
+      - '6379:6379'
+    env_file:
+      - .env
+
+  town-planning-mailhog:
+    image: mailhog/mailhog:latest
+    restart: always
+    ports:
+      - '8026:8025'
+      - '1026:1025'
+    logging:
+      driver: none
+
+volumes:
+  town-planning-pgdata:

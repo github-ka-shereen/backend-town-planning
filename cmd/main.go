@@ -1,0 +1,230 @@
+package main
+
+import (
+	"context"
+	"log"
+
+	config "town-planning-backend/config"
+	"town-planning-backend/token"
+	"town-planning-backend/utils"
+
+	// "town-planning-backend/middleware"
+	"town-planning-backend/middleware"
+
+	// Repositories
+
+	users_repositories "town-planning-backend/users/repositories"
+
+	// Routes
+
+	user_routes "town-planning-backend/users/routes"
+
+	// bleve
+	bleveControllers "town-planning-backend/bleve/controllers"
+	bleveRepositories "town-planning-backend/bleve/repositories"
+	bleveRoutes "town-planning-backend/bleve/routes"
+	bleveServices "town-planning-backend/bleve/services"
+
+	// services
+
+	// "town-planning-backend/internal/bootstrap"
+
+	// WhatsApp
+
+	// Other imports
+	"encoding/gob"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/hibiken/asynq"
+
+	// "github.com/gofiber/fiber/v2/middleware/session"
+	"github.com/google/uuid"
+	"github.com/joho/godotenv"
+	"go.uber.org/zap"
+)
+
+func main() {
+	// Initialize Zap logger
+	config.InitLogger()
+
+	// Load environment variables
+	err := godotenv.Load(".env")
+	if err != nil {
+		config.Logger.Fatal("Error loading .env file", zap.Error(err))
+	}
+	gob.Register(uuid.UUID{})
+
+	app := fiber.New()
+
+	// Apply CORS middleware from middleware package
+	middleware.InitCors(app)
+
+	// Initialize database and configs
+	db := config.ConfigureDatabase()
+	port := config.GetEnv("PORT")
+	ctx := context.Background()
+
+	// Redis client for Asynq and other uses
+	redisAddr := config.GetEnv("REDIS_ADDRESS")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379" // Default for development
+		config.Logger.Warn("REDIS_ADDRESS not set, using default: localhost:6379")
+	}
+
+	redisClient := config.InitRedisServer(ctx) // Assuming this gives you a *redis.Client or similar
+	// Note: asynq.RedisClientOpt uses its own Redis client internally.
+
+	asynqRedisOpt := asynq.RedisClientOpt{
+		Addr:     redisAddr,
+		Password: "", // Or config.GetEnv("REDIS_PASSWORD") if needed
+		DB:       0,
+	}
+
+	asynqClient := asynq.NewClient(asynqRedisOpt)
+	defer asynqClient.Close()
+
+	tokenKey := config.GetEnv("TOKEN_SYMMETRIC_KEY")
+	tokenMaker, err := token.NewPasetoMaker(tokenKey)
+	if err != nil {
+		config.Logger.Fatal("Cannot create token maker", zap.Error(err))
+
+	}
+	// TODO: Update bleve index path for Docker volume in production
+	indexPath := config.GetEnv("BLEVE_INDEX_PATH")
+	if indexPath == "" {
+		indexPath = "./bleve_data" // Default for local development
+		config.Logger.Warn("BLEVE_INDEX_PATH not set, using default: ./bleve_data")
+	}
+
+	// Get base URLs from environment or use defaults
+	baseURL := config.GetEnv("BASE_URL")
+	if baseURL == "" {
+		baseURL = "http://localhost:8080" // Default backend URL
+		config.Logger.Warn("BASE_URL not set, using default", zap.String("url", baseURL))
+	}
+
+	baseFrontendURL := config.GetEnv("BASE_FRONTEND_URL")
+	if baseFrontendURL == "" {
+		baseFrontendURL = "http://localhost:5173" // Default frontend URL
+		config.Logger.Warn("BASE_FRONTEND_URL not set, using default", zap.String("url", baseFrontendURL))
+	}
+
+	// // Use Cloudflare Workers AI (Recommended)
+	// cloudFlareService, err := internal_services.NewCloudflareWorkerAIService(
+	// 	config.GetEnv("CLOUDFLARE_ACCOUNT_ID"),
+	// 	config.GetEnv("CLOUDFLARE_API_TOKEN"),
+	// )
+	// if err != nil {
+	// 	log.Fatal("Failed to create Cloudflare service:", err)
+	// }
+
+	// Initialize the mailer
+	utils.InitializeMailer()
+
+	// Now you can use the mailer globally
+	mailer := utils.GetMailer()
+	if mailer == nil {
+		config.Logger.Fatal("Mailer not initialized")
+		log.Fatalf("Mailer not initialized")
+	}
+
+	// Serve static files
+	app.Static("/public", "./public")
+	app.Static("/uploads", "./uploads")
+
+	// Repositories
+	bleveIndexingService := bleveServices.NewIndexingService(config.Logger, indexPath)
+	userRepo := users_repositories.NewUserRepository(db)
+	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
+
+	// Routes
+	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
+
+	// Bleve Routes
+	bleveController := bleveControllers.NewSearchController(bleveServiceRepo)
+	bleveRoutes.InitBleveRoutes(app, bleveController, db)
+
+	// Date location
+	if err := utils.InitializeDateLocation(); err != nil {
+		config.Logger.Fatal("Failed to initialize date location", zap.Error(err))
+	}
+
+	// Background cleanup tasks
+	go utils.RunScheduledCleanup(redisClient)
+
+	// // ======================
+	// // Create Dummy User (if doesn't exist)
+	// // ======================
+	// dummyEmail := "john.doe@example.com"
+
+	// // First check if user already exists
+	// var existingUser models.User
+	// err = db.Where("email = ?", dummyEmail).First(&existingUser).Error
+
+	// if err != nil {
+	// 	if errors.Is(err, gorm.ErrRecordNotFound) {
+	// 		// User doesn't exist, create new one
+	// 		dummyUser := models.User{
+	// 			ID:        uuid.New(),
+	// 			FirstName: "John",
+	// 			LastName:  "Doe",
+	// 			Email:     dummyEmail,
+	// 			Password:  "password123", // This will be hashed by CreateUser
+	// 			Phone:     "+263771234567",
+	// 			Role:      models.AdminRole,
+	// 			Active:    func(b bool) *bool { return &b }(true),
+	// 			CreatedBy: "system", // Add CreatedBy field
+	// 		}
+
+	// 		createdUser, err := userRepo.CreateUser(&dummyUser)
+	// 		if err != nil {
+	// 			log.Printf("Failed to create dummy user: %v", err)
+	// 		} else {
+	// 			log.Printf("Dummy user created: %s %s (%s)", createdUser.FirstName, createdUser.LastName, createdUser.Email)
+	// 		}
+	// 	} else {
+	// 		log.Printf("Error checking for existing user: %v", err)
+	// 	}
+	// } else {
+	// 	log.Printf("Dummy user already exists: %s %s (%s)", existingUser.FirstName, existingUser.LastName, existingUser.Email)
+	// }
+
+	// Start the application
+	config.Logger.Fatal("Server failed", zap.String("port", port), zap.Error(app.Listen(":"+port)))
+}
+
+// // Initialize and start the PaymentCalculationService
+// paymentCalculationService := payment_services.NewPaymentCalculationService(db, paymentRepo)
+// paymentCalculationService.StartDailyCalculations()
+
+// // Generate a TOKEN_SYMMETRIC_KEY
+// key := make([]byte, 32)
+// _, err = rand.Read(key)
+// if err != nil {
+// 	log.Fatalf("Error generating random key: %v", err)
+// }
+
+// // Encode the key to base64 so it can be easily stored in an environment variable or .env file
+// encodedKey := base64.URLEncoding.EncodeToString(key)
+
+// // Trim the encoded key to the first 32 characters
+// trimmedKey := encodedKey[:32]
+
+// fmt.Println("Your secure PASETO symmetric key (trimmed to 32 characters):")
+// fmt.Println(trimmedKey)
+// fmt.Println("\nIMPORTANT: Add this to your .env file as TOKEN_SYMMETRIC_KEY and ensure .env is in .gitignore.")
+// fmt.Println("Example line for your .env file:")
+// fmt.Printf(`TOKEN_SYMMETRIC_KEY=%s`, trimmedKey)
+// fmt.Println()
+
+// err = config.BackupDatabase()
+// if err != nil {
+// 	config.Logger.Error("Error backing up database", zap.Error(err))
+// 	log.Fatalf("Error backing up database: %v", err)
+// }
+
+// err = config.RestoreDatabase()
+// if err != nil {
+// 	config.Logger.Error("Error restoring database", zap.Error(err))
+// 	log.Fatalf("Error restoring database: %v", err)
+// }
