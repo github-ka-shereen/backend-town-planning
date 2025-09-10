@@ -37,10 +37,11 @@ func isValidEmailFormat(email string) bool {
 	lastDot := -1
 
 	for i, char := range email {
-		if char == '@' {
+		switch char {
+		case '@':
 			atCount++
 			lastAt = i
-		} else if char == '.' {
+		case '.':
 			dotCount++
 			lastDot = i
 		}

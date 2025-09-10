@@ -80,12 +80,12 @@ type DeviceService struct {
 }
 
 type SecurityEvent struct {
-	UserID    string                 `json:"user_id"`
-	EventType string                 `json:"event_type"` // "suspicious_login", "magic_link_used", "device_change"
-	IPAddress string                 `json:"ip_address"`
-	UserAgent string                 `json:"user_agent"`
-	Timestamp time.Time              `json:"timestamp"`
-	Details   map[string]interface{} `json:"details"`
+	UserID    string         `json:"user_id"`
+	EventType string         `json:"event_type"` // "suspicious_login", "magic_link_used", "device_change"
+	IPAddress string         `json:"ip_address"`
+	UserAgent string         `json:"user_agent"`
+	Timestamp time.Time      `json:"timestamp"`
+	Details   map[string]any `json:"details"`
 }
 
 func NewDeviceService(redisClient *redis.Client, ctx context.Context, frontendBaseURL string, deviceTTL time.Duration) *DeviceService {
@@ -105,7 +105,7 @@ func GenerateDeviceID(deviceFingerprint DeviceFingerprint) string {
 	// Normalize user agent to extract stable browser info
 	normalizedUA := normalizeUserAgent(deviceFingerprint.UserAgent)
 
-	fingerprintString := fmt.Sprintf("%s|%s|%s|%s|%s|%v|%s|%s|%d|%d|%d|%d",
+	fingerprintString := fmt.Sprintf("%s|%s|%s|%s|%s|%v|%s|%s|%d|%d|%f|%d",
 		normalizedUA,                          // Stable browser signature
 		deviceFingerprint.ScreenRes,           // Screen resolution (very stable)
 		deviceFingerprint.Platform,            // OS platform (stable)
