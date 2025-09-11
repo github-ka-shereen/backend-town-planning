@@ -97,8 +97,8 @@ func (uc *UserController) UpdateUserController(c *fiber.Ctx) error {
 	if payload.Role != "" {
 		existingUser.Role = models.Role(payload.Role)
 	}
-	if payload.Active != *existingUser.Active {
-		existingUser.Active = &payload.Active
+	if payload.Active != existingUser.Active {
+		existingUser.Active = payload.Active
 	}
 
 	// Password update logic (same as your existing checks)

@@ -4,59 +4,88 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
 type DocumentType string
 
 const (
-	WordDocumentType DocumentType = "WORD_DOCUMENT"
-	TextDocumentType DocumentType = "TEXT_DOCUMENT"
-	SpreadsheetType  DocumentType = "SPREADSHEET"
-	PresentationType DocumentType = "PRESENTATION"
-	ImageType        DocumentType = "IMAGE"
-	PDFType          DocumentType = "PDF"
+	PDFDocument         DocumentType = "PDF"
+	ImageDocument       DocumentType = "IMAGE"
+	WordDocument        DocumentType = "WORD_DOCUMENT"
+	SpreadsheetDocument DocumentType = "SPREADSHEET"
+	CADDocument         DocumentType = "CAD_DRAWING"
+	SurveyPlanDocument  DocumentType = "SURVEY_PLAN"
 )
 
-type DocumentCategoryType string
+type DocumentCategory string
 
 const (
-	StandLegalDocuments                  DocumentCategoryType = "STAND_LEGAL_DOCUMENTS"
-	ClientIdentityVerificationDocuments  DocumentCategoryType = "CLIENT_IDENTITY_DOCUMENTS"
-	ClientCouncilDocuments               DocumentCategoryType = "CLIENT_COUNCIL_DOCUMENTS"
-	PurchaseAgreementDocuments           DocumentCategoryType = "PURCHASE_AGREEMENT_DOCUMENTS"
-	CompanyDocuments                     DocumentCategoryType = "COMPANY_DOCUMENTS"
-	CommunicationCorrespondenceDocuments DocumentCategoryType = "COMMUNICATION_CORRESPONDENCE"
-	StandCoOwnershipDocuments            DocumentCategoryType = "STAND_CO-OWNERSHIP_DOCUMENTS"
-	CityCouncilApplicationDocuments      DocumentCategoryType = "CITY_COUNCIL_APPLICATION_DOCUMENTS"
+	// Legal and Identity Documents
+	TitleDeedCategory           DocumentCategory = "TITLE_DEED"
+	IDCopyCategory              DocumentCategory = "ID_COPY"
+	CompanyRegistrationCategory DocumentCategory = "COMPANY_REGISTRATION"
+	PowerOfAttorneyCategory     DocumentCategory = "POWER_OF_ATTORNEY"
 
-	// Add specific document types
-	IDCopyDocuments              DocumentCategoryType = "ID_COPY"
-	MarriageCertificateDocuments DocumentCategoryType = "MARRIAGE_CERTIFICATE"
-	BirthCertificateDocuments    DocumentCategoryType = "BIRTH_CERTIFICATE"
-	PaySlipDocuments             DocumentCategoryType = "PAY_SLIP"
-	IncomeProofDocuments         DocumentCategoryType = "INCOME_PROOF"
-	ApplicationFormDocuments     DocumentCategoryType = "APPLICATION_FORM"
+	// Planning Documents
+	BuildingPlansCategory         DocumentCategory = "BUILDING_PLANS"
+	SurveyPlanCategory            DocumentCategory = "SURVEY_PLAN"
+	SiteLayoutCategory            DocumentCategory = "SITE_LAYOUT"
+	ArchitecturalDrawingsCategory DocumentCategory = "ARCHITECTURAL_DRAWINGS"
+	StructuralDrawingsCategory    DocumentCategory = "STRUCTURAL_DRAWINGS"
 
-	OtherDocuments DocumentCategoryType = "OTHER_DOCUMENTS"
+	// Financial Documents
+	PaymentReceiptCategory  DocumentCategory = "PAYMENT_RECEIPT"
+	RatesClearanceCategory  DocumentCategory = "RATES_CLEARANCE"
+	AgreementOfSaleCategory DocumentCategory = "AGREEMENT_OF_SALE"
+
+	// Technical Certificates
+	EngineeringCertificateCategory DocumentCategory = "ENGINEERING_CERTIFICATE"
+	LimpimCertificateCategory      DocumentCategory = "LIMPIM_CERTIFICATE"
+	EnvironmentalClearanceCategory DocumentCategory = "ENVIRONMENTAL_CLEARANCE"
+
+	// Application Forms
+	TPDFormCategory         DocumentCategory = "TPD_FORM"
+	ApplicationFormCategory DocumentCategory = "APPLICATION_FORM"
+
+	// Communication
+	CorrespondenceCategory DocumentCategory = "CORRESPONDENCE"
+	NotificationCategory   DocumentCategory = "NOTIFICATION"
+
+	// Other
+	OtherDocumentCategory DocumentCategory = "OTHER"
 )
 
+// Document represents uploaded files associated with clients or applications
 type Document struct {
-	ID               uuid.UUID            `gorm:"type:uuid;primary_key;" json:"id"`
-	FileName         string               `json:"file_name"`
-	DocumentType     DocumentType         `json:"document_type"`
-	FileSize         decimal.Decimal      `json:"file_size"`
-	DocumentCategory DocumentCategoryType `gorm:"type:varchar(50)" json:"document_category"`
-	FilePath         string               `json:"file_path"`
-	CreatedBy        string               `json:"created_by"`
+	ID               uuid.UUID        `gorm:"type:uuid;primary_key;" json:"id"`
+	FileName         string           `gorm:"not null" json:"file_name"`
+	OriginalFileName string           `gorm:"not null" json:"original_file_name"`
+	DocumentType     DocumentType     `gorm:"type:varchar(30);not null" json:"document_type"`
+	DocumentCategory DocumentCategory `gorm:"type:varchar(50);not null;index" json:"document_category"`
+	FileSize         int64            `gorm:"not null" json:"file_size"` // in bytes
+	FilePath         string           `gorm:"not null" json:"file_path"`
+	FileHash         string           `gorm:"index" json:"file_hash"` // For duplicate detection
+	MimeType         string           `json:"mime_type"`
+	IsPublic         bool             `gorm:"default:false" json:"is_public"`
+	Description      *string          `gorm:"type:text" json:"description"`
 
-	ClientID *uuid.UUID `gorm:"type:uuid;index" json:"client_id,omitempty"`
-	Client   *Client    `gorm:"foreignKey:ClientID;references:ID" json:"client,omitempty"`
+	// Associations
+	ClientID      *uuid.UUID `gorm:"type:uuid;index" json:"client_id"`
+	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
 
-	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id,omitempty"`
-	Application   *Application `gorm:"foreignKey:ApplicationID;references:ID" json:"application,omitempty"`
+	// Version control
+	Version    int        `gorm:"default:1" json:"version"`
+	PreviousID *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"` // Links to previous version
 
+	// Relationships
+	Client      *Client      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"client,omitempty"`
+	Application *Application `gorm:"foreignKey:ApplicationID;constraint:OnDelete:CASCADE" json:"application,omitempty"`
+	Previous    *Document    `gorm:"foreignKey:PreviousID" json:"previous,omitempty"`
+	Newer       []Document   `gorm:"foreignKey:PreviousID" json:"newer,omitempty"`
+
+	// Audit fields
+	CreatedBy string         `gorm:"not null" json:"created_by"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`

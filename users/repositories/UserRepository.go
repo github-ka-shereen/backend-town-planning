@@ -128,7 +128,7 @@ func (r *userRepository) CreateUser(user *models.User) (*models.User, error) {
 func (r *userRepository) GetUserByID(id string) (*models.User, error) {
 	var user models.User
 	err := r.db.First(&user, "id = ?", id).Error
-	if user.Active == nil || !*user.Active || user.IsSuspended {
+	if user.Active == false || user.IsSuspended {
 		return nil, fmt.Errorf("user account is disabled")
 	}
 	return &user, err
