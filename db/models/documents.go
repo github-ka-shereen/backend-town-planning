@@ -22,10 +22,10 @@ type DocumentCategory string
 
 const (
 	// Legal and Identity Documents
-	TitleDeedCategory           DocumentCategory = "TITLE_DEED"
-	IDCopyCategory              DocumentCategory = "ID_COPY"
-	CompanyRegistrationCategory DocumentCategory = "COMPANY_REGISTRATION"
-	PowerOfAttorneyCategory     DocumentCategory = "POWER_OF_ATTORNEY"
+	TitleDeedCategory                DocumentCategory = "TITLE_DEED"
+	IDCopyCategory                   DocumentCategory = "ID_COPY"
+	OrganisationRegistrationCategory DocumentCategory = "ORGANISATION_REGISTRATION"
+	PowerOfAttorneyCategory          DocumentCategory = "POWER_OF_ATTORNEY"
 
 	// Planning Documents
 	BuildingPlansCategory         DocumentCategory = "BUILDING_PLANS"
@@ -56,7 +56,7 @@ const (
 	OtherDocumentCategory DocumentCategory = "OTHER"
 )
 
-// Document represents uploaded files associated with clients or applications
+// Document represents uploaded files associated with applicants or applications
 type Document struct {
 	ID               uuid.UUID        `gorm:"type:uuid;primary_key;" json:"id"`
 	FileName         string           `gorm:"not null" json:"file_name"`
@@ -71,7 +71,7 @@ type Document struct {
 	Description      *string          `gorm:"type:text" json:"description"`
 
 	// Associations
-	ClientID      *uuid.UUID `gorm:"type:uuid;index" json:"client_id"`
+	ApplicantID   *uuid.UUID `gorm:"type:uuid;index" json:"applicant_id"`
 	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
 
 	// Version control
@@ -79,7 +79,7 @@ type Document struct {
 	PreviousID *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"` // Links to previous version
 
 	// Relationships
-	Client      *Client      `gorm:"foreignKey:ClientID;constraint:OnDelete:CASCADE" json:"client,omitempty"`
+	Applicant   *Applicant   `gorm:"foreignKey:ApplicantID;constraint:OnDelete:CASCADE" json:"applicant,omitempty"`
 	Application *Application `gorm:"foreignKey:ApplicationID;constraint:OnDelete:CASCADE" json:"application,omitempty"`
 	Previous    *Document    `gorm:"foreignKey:PreviousID" json:"previous,omitempty"`
 	Newer       []Document   `gorm:"foreignKey:PreviousID" json:"newer,omitempty"`

@@ -46,21 +46,11 @@ const (
 	CancelledPayment PaymentStatus = "CANCELLED"
 )
 
-type CommentType string
-
-const (
-	DepartmentComment    CommentType = "DEPARTMENT_COMMENT"
-	ApprovalComment      CommentType = "APPROVAL"
-	RejectionComment     CommentType = "REJECTION"
-	InformationalComment CommentType = "INFORMATIONAL"
-	ClientResponseComment CommentType = "CLIENT_RESPONSE"
-)
-
 // Application represents a single submission to the town planning system.
 type Application struct {
 	ID                    uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ApplicationNumber     string    `gorm:"unique;not null;index" json:"application_number"`
-	ClientID              uuid.UUID `gorm:"type:uuid;not null;index" json:"client_id"`
+	ApplicantID           uuid.UUID `gorm:"type:uuid;not null;index" json:"applicant_id"`
 	ApplicationCategoryID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_category_id"`
 
 	// Property details
@@ -110,7 +100,7 @@ type Application struct {
 	RejectionReason *string `gorm:"type:text" json:"rejection_reason"`
 
 	// Relationships
-	Client              Client              `gorm:"foreignKey:ClientID;constraint:OnDelete:RESTRICT" json:"client"`
+	Applicant           Applicant           `gorm:"foreignKey:ApplicantID;constraint:OnDelete:RESTRICT" json:"applicant"`
 	ApplicationCategory ApplicationCategory `gorm:"foreignKey:ApplicationCategoryID;constraint:OnDelete:RESTRICT" json:"application_category"`
 	Documents           []Document          `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
 	Comments            []Comment           `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
@@ -194,13 +184,11 @@ type ApplicationReview struct {
 type Comment struct {
 	ID            uuid.UUID   `gorm:"type:uuid;primary_key;" json:"id"`
 	ApplicationID uuid.UUID   `gorm:"type:uuid;not null;index" json:"application_id"`
-	CommentType   CommentType `gorm:"type:varchar(30);not null" json:"comment_type"`
 	Department    *Department `gorm:"type:varchar(30)" json:"department"`
 	UserID        *string     `json:"user_id"`
-	UserName      *string     `json:"user_name"`
 	Subject       *string     `json:"subject"`
 	Content       string      `gorm:"type:text;not null" json:"content"`
-	IsInternal    bool        `gorm:"default:false" json:"is_internal"` // Internal vs client-visible
+	IsInternal    bool        `gorm:"default:false" json:"is_internal"` // Internal vs applicant-visible
 	IsResolved    bool        `gorm:"default:false" json:"is_resolved"`
 	ParentID      *uuid.UUID  `gorm:"type:uuid;index" json:"parent_id"` // For threaded comments
 
