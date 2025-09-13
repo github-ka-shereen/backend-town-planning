@@ -22,10 +22,6 @@ func ValidateUser(user *models.User) string {
 	if user.Phone == "" {
 		return "Phone is required"
 	}
-
-	if user.Role != models.AdminRole && user.Role != models.SuperUserRole && user.Role != models.PropertyManagerRole {
-		return "Invalid role"
-	}
 	return ""
 }
 

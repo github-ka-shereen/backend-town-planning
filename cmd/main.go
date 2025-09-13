@@ -9,6 +9,7 @@ import (
 	"town-planning-backend/utils"
 
 	// "town-planning-backend/middleware"
+
 	"town-planning-backend/middleware"
 
 	// Repositories
@@ -152,42 +153,8 @@ func main() {
 	// Background cleanup tasks
 	go utils.RunScheduledCleanup(redisClient)
 
-	// // ======================
-	// // Create Dummy User (if doesn't exist)
-	// // ======================
-	// dummyEmail := "john.doe@example.com"
-
-	// // First check if user already exists
-	// var existingUser models.User
-	// err = db.Where("email = ?", dummyEmail).First(&existingUser).Error
-
-	// if err != nil {
-	// 	if errors.Is(err, gorm.ErrRecordNotFound) {
-	// 		// User doesn't exist, create new one
-	// 		dummyUser := models.User{
-	// 			ID:        uuid.New(),
-	// 			FirstName: "John",
-	// 			LastName:  "Doe",
-	// 			Email:     dummyEmail,
-	// 			Password:  "password123", // This will be hashed by CreateUser
-	// 			Phone:     "+263771234567",
-	// 			Role:      models.AdminRole,
-	// 			Active:    func(b bool) *bool { return &b }(true),
-	// 			CreatedBy: "system", // Add CreatedBy field
-	// 		}
-
-	// 		createdUser, err := userRepo.CreateUser(&dummyUser)
-	// 		if err != nil {
-	// 			log.Printf("Failed to create dummy user: %v", err)
-	// 		} else {
-	// 			log.Printf("Dummy user created: %s %s (%s)", createdUser.FirstName, createdUser.LastName, createdUser.Email)
-	// 		}
-	// 	} else {
-	// 		log.Printf("Error checking for existing user: %v", err)
-	// 	}
-	// } else {
-	// 	log.Printf("Dummy user already exists: %s %s (%s)", existingUser.FirstName, existingUser.LastName, existingUser.Email)
-	// }
+	// Run seeders for initial data
+	// config.RunAllSeeders(db)
 
 	// Start the application
 	config.Logger.Fatal("Server failed", zap.String("port", port), zap.Error(app.Listen(":"+port)))

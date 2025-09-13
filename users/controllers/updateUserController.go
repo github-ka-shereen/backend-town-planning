@@ -94,9 +94,6 @@ func (uc *UserController) UpdateUserController(c *fiber.Ctx) error {
 		}
 		existingUser.Email = payload.Email
 	}
-	if payload.Role != "" {
-		existingUser.Role = models.Role(payload.Role)
-	}
 	if payload.Active != existingUser.Active {
 		existingUser.Active = payload.Active
 	}
@@ -182,15 +179,15 @@ func (uc *UserController) UpdateUserController(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{
 		"message": "User updated successfully",
 		"data": models.User{
-			ID:        updatedUser.ID,
-			FirstName: updatedUser.FirstName,
-			LastName:  updatedUser.LastName,
-			Email:     updatedUser.Email,
-			Phone:     updatedUser.Phone,
-			Role:      updatedUser.Role,
-			Active:    updatedUser.Active,
-			CreatedAt: updatedUser.CreatedAt,
-			UpdatedAt: updatedUser.UpdatedAt,
+			ID:            updatedUser.ID,
+			FirstName:     updatedUser.FirstName,
+			LastName:      updatedUser.LastName,
+			Email:         updatedUser.Email,
+			Phone:         updatedUser.Phone,
+			Role:          updatedUser.Role,
+			Active:        updatedUser.Active,
+			CreatedAt:     updatedUser.CreatedAt,
+			LastUpdatedAt: updatedUser.LastUpdatedAt,
 		},
 	})
 }

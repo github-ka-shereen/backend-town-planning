@@ -25,72 +25,80 @@ const (
 // Applicant represents the core entity applying for services.
 type Applicant struct {
 	ID            uuid.UUID     `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicantType ApplicantType `json:"applicant_type"` // INDIVIDUAL, ORGANISATION, etc.
-	FirstName     *string       `json:"first_name"`     // Optional for organisation applicants
-	LastName      *string       `json:"last_name"`      // Optional for organisation applicants
+	ApplicantType ApplicantType `json:"applicant_type"`
+	FirstName     *string       `json:"first_name"`
+	LastName      *string       `json:"last_name"`
 	MiddleName    *string       `json:"middle_name"`
 	DateOfBirth   *time.Time    `json:"date_of_birth"`
 	Gender        *string       `json:"gender"`
 	Occupation    *string       `json:"occupation"`
 
 	// Organisation specific fields
-	OrganisationName        *string `json:"organisation_name"`         // Required for ORGANISATION type
-	TaxIdentificationNumber *string `json:"tax_identification_number"` // Organisation tax ID
+	OrganisationName        *string `json:"organisation_name"`
+	TaxIdentificationNumber *string `json:"tax_identification_number"`
 
-	// Relationships
-	OrganisationRepresentatives     []OrganisationRepresentative      `gorm:"many2many:applicant_organisation_representatives;" json:"organisation_representatives"`
-	Applications                    []Application                     `gorm:"foreignKey:ApplicantID" json:"applications"`
-	ApplicantAdditionalPhoneNumbers []ApplicantAdditionalPhoneNumbers `gorm:"foreignKey:ApplicantID" json:"applicant_additional_phone_numbers"`
+	// Relationships - CORRECTED
+	OrganisationRepresentatives []OrganisationRepresentative `gorm:"many2many:applicant_organisation_representatives;foreignKey:ID;joinForeignKey:ApplicantID;References:ID;joinReferences:OrganisationRepresentativeID" json:"organisation_representatives"`
+	Applications                []Application                `gorm:"foreignKey:ApplicantID" json:"applications"`
+	AdditionalPhoneNumbers      []ApplicantAdditionalPhone   `gorm:"foreignKey:ApplicantID" json:"additional_phone_numbers"` // Renamed for consistency
 
 	// Contact information
 	PostalAddress  *string         `json:"postal_address"`
 	City           *string         `json:"city"`
 	WhatsAppNumber *string         `json:"whatsapp_number"`
-	Email          string          `json:"email"`                       // Primary contact email
-	IdNumber       *string         `json:"id_number"`                   // National Registration Card
-	PhoneNumber    string          `json:"phone_number"`                // Primary contact number
-	Status         ApplicantStatus `json:"status"`                      // PROSPECTIVE/ACTIVE/INACTIVE
-	FullName       string          `json:"full_name"`                   // Computed field
-	Debtor         bool            `gorm:"default:false" json:"debtor"` // Owes money to council
+	Email          string          `json:"email"`
+	IdNumber       *string         `json:"id_number"`
+	PhoneNumber    string          `json:"phone_number"`
+	Status         ApplicantStatus `json:"status"`
+	FullName       string          `json:"full_name" gorm:"-"`
+	Debtor         bool            `gorm:"default:false" json:"debtor"`
 
 	// Metadata
-	CreatedBy string    `json:"created_by"` // Staff ID who created record
+	CreatedBy string    `json:"created_by"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
 // ApplicantDocument tracks supporting documents submitted with applications
 type ApplicantDocument struct {
-	ID            uuid.UUID    `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicantID   uuid.UUID    `gorm:"type:uuid;not null;index" json:"applicant_id"`
-	ApplicationID *uuid.UUID   `gorm:"type:uuid;index" json:"application_id"` // Optional link to specific application
-	DocumentID    uuid.UUID    `gorm:"type:uuid;not null;index" json:"document_id"`
-	CreatedAt     time.Time    `gorm:"autoCreateTime" json:"created_at"`
-	CreatedBy     string       `json:"created_by"`
-	Document      Document     `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
-	Application   *Application `gorm:"foreignKey:ApplicationID;constraint:OnDelete:SET NULL" json:"application"`
+	ID            uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
+	ApplicantID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
+	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
+	DocumentID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	CreatedBy     string     `json:"created_by"`
+
+	// Relationships - CORRECTED
+	Document    Document     `gorm:"foreignKey:DocumentID" json:"document"`
+	Application *Application `gorm:"foreignKey:ApplicationID" json:"application"`
+	Applicant   Applicant    `gorm:"foreignKey:ApplicantID" json:"applicant"`
 }
 
-// ApplicantAdditionalPhoneNumbers stores alternate contact numbers
-type ApplicantAdditionalPhoneNumbers struct {
+// ApplicantAdditionalPhone stores alternate contact numbers
+type ApplicantAdditionalPhone struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicantID uuid.UUID `json:"applicant_id"` // Parent applicant
-	PhoneNumber string    `json:"phone_number"` // Additional contact
+	ApplicantID uuid.UUID `gorm:"type:uuid;not null;index" json:"applicant_id"`
+	PhoneNumber string    `json:"phone_number"`
 	CreatedAt   time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt   time.Time `gorm:"autoUpdateTime" json:"updated_at"`
-	CreatedBy   string    `json:"created_by"` // Staff who added
+	CreatedBy   string    `json:"created_by"`
+
+	// Relationship - ADDED
+	Applicant Applicant `gorm:"foreignKey:ApplicantID" json:"applicant"`
 }
 
 // OrganisationRepresentative identifies people authorized for organisation applications
 type OrganisationRepresentative struct {
-	ID             uuid.UUID   `gorm:"type:uuid;primary_key;" json:"id"`
-	FirstName      string      `json:"first_name"`
-	LastName       string      `json:"last_name"`
-	Email          string      `json:"email"`
-	PhoneNumber    string      `json:"phone_number"`
-	WhatsAppNumber *string     `json:"whatsapp_number"`
-	Role           string      `json:"role"` // Position in organisation
-	Applicants     []Applicant `gorm:"many2many:applicant_organisation_representatives;" json:"applicants"`
+	ID             uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	FirstName      string    `json:"first_name"`
+	LastName       string    `json:"last_name"`
+	Email          string    `json:"email"`
+	PhoneNumber    string    `json:"phone_number"`
+	WhatsAppNumber *string   `json:"whatsapp_number"`
+	Role           string    `json:"role"`
+
+	// Relationships - CORRECTED
+	Applicants []Applicant `gorm:"many2many:applicant_organisation_representatives;foreignKey:ID;joinForeignKey:OrganisationRepresentativeID;References:ID;joinReferences:ApplicantID" json:"applicants"`
 
 	CreatedBy string    `gorm:"not null" json:"created_by"`
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -99,9 +107,13 @@ type OrganisationRepresentative struct {
 
 // ApplicantOrganisationRepresentative join table for organisation reps
 type ApplicantOrganisationRepresentative struct {
-	ApplicantID                  uuid.UUID `gorm:"primaryKey"`
-	OrganisationRepresentativeID uuid.UUID `gorm:"primaryKey"`
-	CreatedAt                    time.Time `gorm:"autoCreateTime"`
+	ApplicantID                  uuid.UUID `gorm:"type:uuid;primaryKey" json:"applicant_id"`
+	OrganisationRepresentativeID uuid.UUID `gorm:"type:uuid;primaryKey" json:"organisation_representative_id"`
+	CreatedAt                    time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships - ADDED for better querying
+	Applicant                  Applicant                  `gorm:"foreignKey:ApplicantID" json:"applicant"`
+	OrganisationRepresentative OrganisationRepresentative `gorm:"foreignKey:OrganisationRepresentativeID" json:"organisation_representative"`
 }
 
 // TableName overrides default table name for join table

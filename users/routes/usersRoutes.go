@@ -90,6 +90,7 @@ func InitRoutes(
 	}
 
 	// Protected routes (require authentication)
+	// http://localhost:8080/api/v1/users : Delete
 	protectedRoutes := app.Group("/api/v1")
 	protectedRoutes.Use(middleware.ProtectedRoute(appContext))
 	{

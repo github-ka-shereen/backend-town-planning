@@ -55,7 +55,7 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // Define a skip list for tables that should not be dropped
 	// skipTables := map[string]bool{
-	// 	"users": true,
+	// 	// "users": true,
 	// 	// "clients": true,
 	// 	// Add other tables to skip here
 	// 	// "email_logs": true,
@@ -63,9 +63,9 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // Drop all tables EXCEPT skipTables
 	// for _, table := range tables {
-	// 	if skipTables[table] {
-	// 		continue // Skip tables in the skip list
-	// 	}
+	// 	// if skipTables[table] {
+	// 	// 	continue // Skip tables in the skip list
+	// 	// }
 	// 	if err := db.Migrator().DropTable(table); err != nil {
 	// 		log.Fatalf("Failed to drop table %s: %v", table, err)
 	// 	}
@@ -73,8 +73,30 @@ func ConfigureDatabase() *gorm.DB {
 
 	// Auto-migrate all models (including users table which was preserved)
 	err = db.AutoMigrate(
-		// User and System Models
+		// Core Authentication and Authorization Models
+		&models.Permission{},
+		&models.Role{},
+		&models.RolePermission{},
+		&models.Department{},
 		&models.User{},
+		&models.UserAuditLog{},
+
+		// Applicants (when uncommented)
+		// &models.Applicant{},
+		// &models.OrganisationRepresentative{},
+		// &models.ApplicantDocument{},
+		// &models.ApplicantAdditionalPhoneNumbers{},
+		// &models.ApplicantOrganisationRepresentative{},
+
+		// Applications (when uncommented)
+		// &models.Application{},
+		// &models.ApplicationCategory{},
+		// &models.RequiredDocument{},
+		// &models.ApplicationReview{},
+		// &models.Comment{},
+
+		// Documents (when uncommented)
+		// &models.Document{},
 	)
 
 	if err != nil {
