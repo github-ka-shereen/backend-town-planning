@@ -19,7 +19,7 @@ type UserRepository interface {
 	UpdateUser(user *models.User) (*models.User, error)
 	DeleteUser(id string) error
 	GetAllUsers() ([]models.User, error)
-	GetFilteredUsers(role, startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
+	GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
 }
 
 // Implementations
@@ -41,17 +41,12 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func (r *userRepository) GetFilteredUsers(role, startDate, endDate string, pageSize, page int) ([]models.User, int64, error) {
+func (r *userRepository) GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error) {
 	var users []models.User
 	var totalResults int64
 
 	query := r.db.Model(&models.User{}).
-		Select("id, first_name, last_name, email, phone, role, active, created_at, updated_at")
-
-	// Add role filter if provided
-	if role != "" {
-		query = query.Where("role = ?", role)
-	}
+		Select("id, first_name, last_name, email, phone, active, created_at, last_updated_at")
 
 	// Add date range filter if both dates are provided
 	if startDate != "" && endDate != "" {

@@ -34,7 +34,6 @@ func (uc *UserController) GetFilteredUsersController(c *fiber.Ctx) error {
 		// File found in Redis, return it directly
 		downloadURL := ""
 		users, total, err := uc.UserRepo.GetFilteredUsers(
-			params.Filters["role"],
 			params.Filters["start_date"],
 			params.Filters["end_date"],
 			params.PageSize,
@@ -89,7 +88,6 @@ func (uc *UserController) GetFilteredUsersController(c *fiber.Ctx) error {
 
 	// If file not found in Redis, generate it using the storage key
 	users, total, err := uc.UserRepo.GetFilteredUsers(
-		params.Filters["role"],
 		params.Filters["start_date"],
 		params.Filters["end_date"],
 		params.PageSize,

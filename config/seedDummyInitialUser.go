@@ -87,16 +87,14 @@ func SeedDummyInitialUser(db *gorm.DB) error {
 func SeedDummyData(db *gorm.DB) error {
 	// 1. Create Admin Role if not exists
 	var adminRole models.Role
-	err := db.Where("code = ?", "admin").First(&adminRole).Error
+	err := db.Where("name = ?", "Administrator").First(&adminRole).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		adminRole = models.Role{
 			ID:          uuid.New(),
 			Name:        "Administrator",
 			Description: "System administrator with full access",
-			Code:        "admin",
 			IsSystem:    true,
 			IsActive:    true,
-			Level:       100,
 			CreatedBy:   "system",
 		}
 
@@ -110,16 +108,14 @@ func SeedDummyData(db *gorm.DB) error {
 
 	// 2. Create User Role if not exists
 	var userRole models.Role
-	err = db.Where("code = ?", "user").First(&userRole).Error
+	err = db.Where("name = ?", "User").First(&userRole).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		userRole = models.Role{
 			ID:          uuid.New(),
 			Name:        "User",
 			Description: "Standard user with limited access",
-			Code:        "user",
 			IsSystem:    false,
 			IsActive:    true,
-			Level:       10,
 			CreatedBy:   "system",
 		}
 
@@ -133,7 +129,7 @@ func SeedDummyData(db *gorm.DB) error {
 
 	// 3. Create IT Department if not exists
 	var itDepartment models.Department
-	err = db.Where("code = ?", "it").First(&itDepartment).Error
+	err = db.Where("name = ?", "Information Technology").First(&itDepartment).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		itDepartment = models.Department{
 			ID:             uuid.New(),
@@ -157,7 +153,7 @@ func SeedDummyData(db *gorm.DB) error {
 
 	// 4. Create Planning Department if not exists
 	var planningDepartment models.Department
-	err = db.Where("code = ?", "planning").First(&planningDepartment).Error
+	err = db.Where("name = ?", "Town Planning").First(&planningDepartment).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		planningDepartment = models.Department{
 			ID:             uuid.New(),

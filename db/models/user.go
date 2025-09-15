@@ -17,7 +17,6 @@ const (
 	AuthMethodAuthenticator AuthMethod = "authenticator"
 )
 
-
 // Permission represents individual system permissions
 type Permission struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
@@ -49,10 +48,8 @@ type Role struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	Name        string    `gorm:"type:varchar(100);uniqueIndex;not null" json:"name" validate:"required,min=2,max=100"`
 	Description string    `gorm:"type:varchar(500)" json:"description" validate:"max=500"`
-	Code        string    `gorm:"type:varchar(50);uniqueIndex;not null" json:"code" validate:"required,min=2,max=50,alphanum"`
 	IsSystem    bool      `gorm:"default:false;index:idx_role_system" json:"is_system"`
 	IsActive    bool      `gorm:"default:true;index:idx_role_active" json:"is_active"`
-	Level       int       `gorm:"default:0;index:idx_role_level" json:"level" validate:"min=0,max=100"`
 
 	// Relationships
 	Permissions []RolePermission `gorm:"foreignKey:RoleID;constraint:OnDelete:CASCADE" json:"permissions,omitempty"`
@@ -248,9 +245,6 @@ func (r *Role) BeforeCreate(tx *gorm.DB) error {
 
 	if r.Name == "" {
 		return errors.New("role name is required")
-	}
-	if r.Code == "" {
-		return errors.New("role code is required")
 	}
 
 	return nil
