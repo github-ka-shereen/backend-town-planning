@@ -423,9 +423,22 @@ func GenerateModelPermissions(db *gorm.DB, resourceName, category, createdBy str
 	return db.Transaction(func(tx *gorm.DB) error {
 		for _, action := range actions {
 			permissionName := fmt.Sprintf("%s.%s", strings.TrimSuffix(resourceName, "s"), action)
-			description := getActionDescription(action, resourceName)
 
-			// Use FirstOrCreate for better upsert logic
+			// Check if permission already exists
+			var existingPermission models.Permission
+			err := tx.Where("name = ?", permissionName).First(&existingPermission).Error
+
+			if err == nil {
+				// Permission exists - skip creation to preserve role assignments
+				log.Printf("[PERMISSIONS] ↻ Permission already exists, skipping: %s", permissionName)
+				continue
+			} else if err != gorm.ErrRecordNotFound {
+				// Actual database error
+				return fmt.Errorf("failed to check existing permission %s: %w", permissionName, err)
+			}
+
+			// Permission doesn't exist - create it
+			description := getActionDescription(action, resourceName)
 			permission := models.Permission{
 				Name:        permissionName,
 				Description: description,
@@ -436,27 +449,11 @@ func GenerateModelPermissions(db *gorm.DB, resourceName, category, createdBy str
 				CreatedBy:   createdBy,
 			}
 
-			var existingPermission models.Permission
-			result := tx.Where("name = ?", permissionName).FirstOrCreate(&existingPermission, permission)
-
-			if result.Error != nil {
-				return fmt.Errorf("failed to create/find permission %s: %w", permissionName, result.Error)
+			if err := tx.Create(&permission).Error; err != nil {
+				return fmt.Errorf("failed to create permission %s: %w", permissionName, err)
 			}
 
-			// If record existed (RowsAffected = 0), update it with current values
-			if result.RowsAffected == 0 {
-				updates := map[string]interface{}{
-					"description": description,
-					"resource":    resourceName,
-					"action":      action,
-					"category":    category,
-					"is_active":   true,
-				}
-
-				if err := tx.Model(&existingPermission).Updates(updates).Error; err != nil {
-					return fmt.Errorf("failed to update permission %s: %w", permissionName, err)
-				}
-			}
+			log.Printf("[PERMISSIONS] ✨ Created new permission: %s", permissionName)
 		}
 		return nil
 	})
