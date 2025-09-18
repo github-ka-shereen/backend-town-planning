@@ -103,6 +103,7 @@ func InitRoutes(
 			// General routes
 			userRoutes.Get("/", userController.GetAllUsersController)
 			userRoutes.Post("/", userController.CreateUser)
+			userRoutes.Get("/permissions", userController.GetAllPermissionsController)
 
 			// ID-based routes with validation
 			userRoutes.Get("/:id", userController.RetrieveSingleUserController)

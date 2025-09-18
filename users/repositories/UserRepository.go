@@ -19,6 +19,7 @@ type UserRepository interface {
 	UpdateUser(user *models.User) (*models.User, error)
 	DeleteUser(id string) error
 	GetAllUsers() ([]models.User, error)
+	GetAllPermissions() ([]models.Permission, error)
 	GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
 }
 
@@ -29,6 +30,12 @@ type userRepository struct {
 
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) GetAllPermissions() ([]models.Permission, error) {
+	var permissions []models.Permission
+	err := r.db.Find(&permissions).Error
+	return permissions, err
 }
 
 func HashPassword(password string) (string, error) {
