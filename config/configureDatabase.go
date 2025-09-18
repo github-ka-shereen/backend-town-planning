@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"log"
+	"reflect"
 	"strings"
 	"time"
 	"town-planning-backend/db/models"
@@ -122,50 +123,54 @@ func ConfigureDatabase() *gorm.DB {
 	}
 
 	// ===== Auto-generate permissions for all models =====
-	// // Define models to skip permission generation for (e.g., join tables, audit logs)
-	// skipList := map[string]bool{
-	// 	"permissions":                            true, // Changed from "permission"
-	// 	"role_permissions":                       true, // Changed from "role_permission"
-	// 	"user_audit_logs":                        true, // Changed from "user_audit_log"
-	// 	"applicant_organisation_representatives": true, // Join table
-	// 	// Add other tables to skip here
-	// }
+	// Simplified manual skip list - only for special non-join tables
+	skipList := map[string]bool{
+		"permissions":     true, // Don't generate permissions for permissions themselves
+		"user_audit_logs": true, // Audit table (not a join table but should be skipped)
+		// Add other non-join tables to skip here
+	}
 
-	// log.Println("[PERMISSIONS] Starting automatic CRUD permission generation...")
+	log.Println("[PERMISSIONS] Starting automatic CRUD permission generation...")
 
-	// // Generate permissions for each model automatically
-	// for _, model := range allModels {
-	// 	modelType := reflect.TypeOf(model)
-	// 	if modelType.Kind() == reflect.Ptr {
-	// 		modelType = modelType.Elem()
-	// 	}
+	// Generate permissions for each model automatically
+	for _, model := range allModels {
+		modelType := reflect.TypeOf(model)
+		if modelType.Kind() == reflect.Ptr {
+			modelType = modelType.Elem()
+		}
 
-	// 	// Get the actual GORM table name
-	// 	stmt := &gorm.Statement{DB: db}
-	// 	stmt.Parse(model)
-	// 	tableName := stmt.Schema.Table
+		// Get the actual GORM table name
+		stmt := &gorm.Statement{DB: db}
+		stmt.Parse(model)
+		tableName := stmt.Schema.Table
 
-	// 	// DEBUG: Print the actual table name
-	// 	log.Printf("[DEBUG] Model: %s, Table: %s", modelType.Name(), tableName)
+		// DEBUG: Print the actual table name
+		log.Printf("[DEBUG] Model: %s, Table: %s", modelType.Name(), tableName)
 
-	// 	// Skip tables that don't need CRUD permissions
-	// 	if skipList[tableName] {
-	// 		log.Printf("[PERMISSIONS] Skipping permission generation for table: %s", tableName)
-	// 		continue
-	// 	}
+		// Check if this is a join table using improved detection and skip it
+		if isJoinTable(modelType) {
+			log.Printf("[PERMISSIONS] 🔗 Skipping join table: %s (no permissions needed)", tableName)
+			continue
+		}
 
-	// 	// Use the model struct name as the resource (e.g., "User" -> "users")
-	// 	resource := Pluralize(strings.ToLower(modelType.Name()))
-	// 	category := strings.ToLower(modelType.Name()) + "_management"
+		// Also check the manual skip list for non-join tables that should be skipped
+		if skipList[tableName] {
+			log.Printf("[PERMISSIONS] Skipping table (manual skip list): %s", tableName)
+			continue
+		}
 
-	// 	if err := GenerateModelPermissions(db, resource, category, "system"); err != nil {
-	// 		log.Printf("[PERMISSIONS] Failed to generate permissions for %s: %v", resource, err)
-	// 	} else {
-	// 		log.Printf("[PERMISSIONS] ✓ Generated CRUD permissions for: %s", resource)
-	// 	}
-	// }
+		// Use the model struct name as the resource (e.g., "User" -> "users")
+		resource := Pluralize(strings.ToLower(modelType.Name()))
+		category := strings.ToLower(modelType.Name()) + "_management"
 
-	// log.Println("[PERMISSIONS] Automatic permission generation completed")
+		if err := GenerateModelPermissions(db, resource, category, "system"); err != nil {
+			log.Printf("[PERMISSIONS] Failed to generate permissions for %s: %v", resource, err)
+		} else {
+			log.Printf("[PERMISSIONS] ✅ Generated CRUD permissions for: %s", resource)
+		}
+	}
+
+	log.Println("[PERMISSIONS] Automatic permission generation completed")
 
 	// ===== END OF PERMISSIONS GENERATION =====
 
@@ -181,6 +186,179 @@ func ConfigureDatabase() *gorm.DB {
 	log.Println("[DB-POOL] Connection pool configured")
 	log.Println("[DB-STATUS] Database setup complete")
 	return db
+}
+
+// isJoinTable comprehensively detects join tables using multiple criteria
+func isJoinTable(structType reflect.Type) bool {
+	if structType.Kind() != reflect.Struct {
+		return false
+	}
+
+	structName := structType.Name()
+
+	// Method 1: Name-based detection (most reliable for conventional naming)
+	if isJoinTableByName(structName) {
+		return true
+	}
+
+	// Method 2: Structural analysis
+	if isJoinTableByStructure(structType) {
+		return true
+	}
+
+	return false
+}
+
+// isJoinTableByName detects join tables by naming conventions
+func isJoinTableByName(structName string) bool {
+	name := strings.ToLower(structName)
+
+	// Pattern 1: Contains common join table keywords
+	joinKeywords := []string{
+		"permission", "assignment", "mapping", "relation", "link",
+		"association", "connection", "junction", "bridge", "pivot",
+	}
+
+	for _, keyword := range joinKeywords {
+		if strings.Contains(name, keyword) {
+			return true
+		}
+	}
+
+	// Pattern 2: Two entity names combined (e.g., UserRole, ProductCategory)
+	// This is harder to detect generically, but we can look for common patterns
+	commonEntities := []string{
+		"user", "role", "permission", "group", "team", "department",
+		"product", "category", "tag", "order", "item", "customer",
+		"company", "project", "task", "document", "file", "applicant",
+		"organisation", "application", "representative",
+	}
+
+	var entityMatches int
+	for _, entity := range commonEntities {
+		if strings.Contains(name, entity) {
+			entityMatches++
+		}
+	}
+
+	// If name contains 2+ entity names, likely a join table
+	if entityMatches >= 2 {
+		return true
+	}
+
+	return false
+}
+
+// isJoinTableByStructure analyzes the struct fields to detect join table patterns
+func isJoinTableByStructure(structType reflect.Type) bool {
+	var foreignKeyCount int
+	var actualDbFieldCount int
+	var hasID bool
+
+	for i := 0; i < structType.NumField(); i++ {
+		field := structType.Field(i)
+		fieldName := field.Name
+		fieldType := field.Type
+
+		// Skip unexported fields
+		if !field.IsExported() {
+			continue
+		}
+
+		// Skip GORM relationship fields (struct types that aren't DB columns)
+		if isRelationshipField(field) {
+			continue
+		}
+
+		// Count actual database fields
+		actualDbFieldCount++
+
+		// Check for ID field
+		if fieldName == "ID" {
+			hasID = true
+			continue
+		}
+
+		// Check for timestamp fields
+		if isTimestampField(fieldName, fieldType) {
+			continue
+		}
+
+		// Check for foreign key fields
+		if isForeignKeyField(fieldName, fieldType) {
+			foreignKeyCount++
+		}
+	}
+
+	// Join table structural criteria:
+	// 1. Has exactly 2 foreign keys (the core requirement)
+	// 2. Low total DB field count (ID + 2 FKs + maybe timestamps = 3-6 fields typically)
+	// 3. Usually has ID and timestamps
+	return foreignKeyCount == 2 &&
+		actualDbFieldCount >= 3 && actualDbFieldCount <= 8 &&
+		hasID
+}
+
+// Helper functions for join table detection
+
+func isRelationshipField(field reflect.StructField) bool {
+	fieldType := field.Type
+
+	// Direct struct types (belongs-to relationships)
+	if fieldType.Kind() == reflect.Struct && !isPrimitiveStructType(fieldType) {
+		return true
+	}
+
+	// Pointer to struct (optional belongs-to)
+	if fieldType.Kind() == reflect.Ptr && fieldType.Elem().Kind() == reflect.Struct && !isPrimitiveStructType(fieldType.Elem()) {
+		return true
+	}
+
+	// Slices (has-many relationships)
+	if fieldType.Kind() == reflect.Slice {
+		elemType := fieldType.Elem()
+		if elemType.Kind() == reflect.Struct && !isPrimitiveStructType(elemType) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isPrimitiveStructType(fieldType reflect.Type) bool {
+	typeName := fieldType.String()
+	primitiveStructs := []string{
+		"time.Time", "uuid.UUID", "gorm.DeletedAt",
+		"datatypes.JSON", "datatypes.Date", "datatypes.Time",
+	}
+
+	for _, primitive := range primitiveStructs {
+		if typeName == primitive {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isForeignKeyField(fieldName string, fieldType reflect.Type) bool {
+	// Must end with "ID" but not be the primary key "ID"
+	if !strings.HasSuffix(fieldName, "ID") || fieldName == "ID" {
+		return false
+	}
+
+	// Should be a UUID type for foreign keys
+	return fieldType.String() == "uuid.UUID" || fieldType.String() == "*uuid.UUID"
+}
+
+func isTimestampField(fieldName string, fieldType reflect.Type) bool {
+	timestampNames := []string{"CreatedAt", "UpdatedAt", "DeletedAt"}
+	for _, name := range timestampNames {
+		if fieldName == name {
+			return true
+		}
+	}
+	return fieldType.String() == "time.Time" || fieldType.String() == "*time.Time" || fieldType.String() == "gorm.DeletedAt"
 }
 
 // Pluralize converts singular resource names to plural
