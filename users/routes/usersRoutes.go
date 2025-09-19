@@ -104,9 +104,11 @@ func InitRoutes(
 			userRoutes.Get("/", userController.GetAllUsersController)
 			userRoutes.Post("/", userController.CreateUser)
 			userRoutes.Get("/permissions", userController.GetAllPermissionsController)
+			userRoutes.Post("/roles", userController.CreateRoleWithPermissionsController)
 
 			// ID-based routes with validation
 			userRoutes.Get("/:id", userController.RetrieveSingleUserController)
+			userRoutes.Get("/roles/:id", userController.GetRoleWithPermissionsController)
 			userRoutes.Patch("/:id", userController.UpdateUserController)
 			userRoutes.Delete("/:id", userController.DeleteUserController)
 		}

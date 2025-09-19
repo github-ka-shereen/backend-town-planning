@@ -91,8 +91,7 @@ func (RolePermission) TableName() string {
 type Department struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	Name        string    `gorm:"type:varchar(100);uniqueIndex;not null" json:"name" validate:"required,min=2,max=100"`
-	Description string    `gorm:"type:varchar(500)" json:"description" validate:"max=500"`
-	Code        string    `gorm:"type:varchar(20);uniqueIndex;not null" json:"code" validate:"required,min=2,max=20,alphanum"`
+	Description *string    `gorm:"type:varchar(500)" json:"description" validate:"max=500"`
 	IsActive    bool      `gorm:"default:true;index:idx_department_active" json:"is_active"`
 
 	// Contact information with proper validation
@@ -275,9 +274,6 @@ func (d *Department) BeforeCreate(tx *gorm.DB) error {
 
 	if d.Name == "" {
 		return errors.New("department name is required")
-	}
-	if d.Code == "" {
-		return errors.New("department code is required")
 	}
 
 	return nil

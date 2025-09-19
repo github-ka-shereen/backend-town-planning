@@ -134,8 +134,7 @@ func SeedDummyData(db *gorm.DB) error {
 		itDepartment = models.Department{
 			ID:             uuid.New(),
 			Name:           "Information Technology",
-			Description:    "IT Department responsible for system administration",
-			Code:           "it",
+			Description:    stringPtr("IT Department responsible for system administration"),
 			IsActive:       true,
 			Email:          stringPtr("it@example.com"),
 			PhoneNumber:    stringPtr("+263771111111"),
@@ -158,8 +157,7 @@ func SeedDummyData(db *gorm.DB) error {
 		planningDepartment = models.Department{
 			ID:             uuid.New(),
 			Name:           "Town Planning",
-			Description:    "Town Planning Department responsible for development applications",
-			Code:           "planning",
+			Description:    stringPtr("Town Planning Department responsible for development applications"),
 			IsActive:       true,
 			Email:          stringPtr("planning@example.com"),
 			PhoneNumber:    stringPtr("+263772222222"),

@@ -21,6 +21,9 @@ type UserRepository interface {
 	GetAllUsers() ([]models.User, error)
 	GetAllPermissions() ([]models.Permission, error)
 	GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
+	GetAllRoles() ([]models.Role, error)
+	GetRoleWithPermissionsByID(roleID string) (*models.Role, error)
+	CreateDepartment(department *models.Department) (*models.Department, error)
 }
 
 // Implementations
@@ -30,6 +33,56 @@ type userRepository struct {
 
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) CreateDepartment(department *models.Department) (*models.Department, error) {
+	// Check if department with same name already exists (including soft-deleted)
+	var existing models.Department
+	err := r.db.Unscoped().Where("name = ?", department.Name).First(&existing).Error
+	if err == nil {
+		// Department found
+		if existing.DeletedAt.Valid {
+			// Soft-deleted: restore and update
+			existing.DeletedAt = gorm.DeletedAt{}
+			existing.Description = department.Description
+			existing.IsActive = department.IsActive
+			existing.Email = department.Email
+			existing.PhoneNumber = department.PhoneNumber
+			existing.OfficeLocation = department.OfficeLocation
+			existing.CreatedBy = department.CreatedBy
+
+			if err := r.db.Unscoped().Save(&existing).Error; err != nil {
+				return nil, fmt.Errorf("failed to restore soft-deleted department: %w", err)
+			}
+			return &existing, nil
+		} else {
+			// Active department with same name already exists
+			return nil, fmt.Errorf("a department with that name already exists")
+		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		// Unexpected DB error
+		return nil, fmt.Errorf("failed to check for existing department: %w", err)
+	}
+
+	// Create new department
+	if err := r.db.Create(department).Error; err != nil {
+		return nil, fmt.Errorf("failed to create department in database: %w", err)
+	}
+
+	return department, nil
+}
+
+
+func (r *userRepository) GetRoleWithPermissionsByID(roleID string) (*models.Role, error) {
+	var role models.Role
+	err := r.db.Preload("Permissions.Permission").Where("id = ?", roleID).First(&role).Error
+	return &role, err
+}
+
+func (r *userRepository) GetAllRoles() ([]models.Role, error) {
+	var roles []models.Role
+	err := r.db.Find(&roles).Error
+	return roles, err
 }
 
 func (r *userRepository) GetAllPermissions() ([]models.Permission, error) {
