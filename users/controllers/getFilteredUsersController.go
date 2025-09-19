@@ -36,7 +36,9 @@ func (uc *UserController) GetFilteredUsersController(c *fiber.Ctx) error {
 	active := cleanQueryParam(c.Query("active"))
 	startDate := cleanQueryParam(c.Query("start_date"))
 	endDate := cleanQueryParam(c.Query("end_date"))
+	userRole := cleanQueryParam(c.Query("user_role"))
 	userEmail := cleanQueryParam(c.Query("user_email"))
+	department := cleanQueryParam(c.Query("department"))
 
 	// Validate user_email (optional)
 	if userEmail == "" {
@@ -45,16 +47,21 @@ func (uc *UserController) GetFilteredUsersController(c *fiber.Ctx) error {
 
 	offset := (page - 1) * pageSize
 	filters := make(map[string]string)
-	if active != "" {
+	if active != "" && active != "undefined" {
 		filters["active"] = active
 	}
-	if startDate != "" {
+	if startDate != "" && startDate != "null" {
 		filters["start_date"] = startDate
 	}
-	if endDate != "" {
+	if endDate != "" && endDate != "null" {
 		filters["end_date"] = endDate
 	}
-
+	if userRole != "" && userRole != "undefined" {
+		filters["user_role"] = userRole
+	}
+	if department != "" && department != "undefined" {
+		filters["department"] = department
+	}
 	delete(filters, "user_email")
 
 	// Fetch paginated results

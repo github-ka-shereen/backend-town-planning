@@ -123,9 +123,13 @@ func (r *userRepository) GetFilteredUsers(pageSize int, offset int, filters map[
 				db = db.Where("is_active = ?", false)
 			}
 		case "start_date":
-			db = db.Where("created_at >= ?", value)
+			db = db.Where("Date(created_at) >= ?", value)
 		case "end_date":
-			db = db.Where("created_at <= ?", value)
+			db = db.Where("Date(created_at) <= ?", value)
+		case "user_role":
+			db = db.Where("role_id = ?", value)
+		case "department":
+			db = db.Where("department_id = ?", value)
 		}
 	}
 
