@@ -12,6 +12,7 @@ import (
 
 type ApplicantRepository interface {
 	CreateApplicant(tx *gorm.DB, applicant *models.Applicant) (*models.Applicant, error)
+	GetAllApplicants() ([]models.Applicant, error)
 }
 
 type applicantRepository struct {
@@ -21,6 +22,15 @@ type applicantRepository struct {
 // NewApplicantRepository initializes a new applicant repository
 func NewApplicantRepository(db *gorm.DB) ApplicantRepository {
 	return &applicantRepository{DB: db}
+}
+
+func (ar *applicantRepository) GetAllApplicants() ([]models.Applicant, error) {
+	var applicants []models.Applicant
+	if err := ar.DB.Find(&applicants).Error; err != nil {
+		config.Logger.Error("Failed to get all applicants", zap.Error(err))
+		return nil, fmt.Errorf("failed to get all applicants: %w", err)
+	}
+	return applicants, nil
 }
 
 func (ar *applicantRepository) CreateApplicant(tx *gorm.DB, applicant *models.Applicant) (*models.Applicant, error) {

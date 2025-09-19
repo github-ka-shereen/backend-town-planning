@@ -15,10 +15,12 @@ import (
 	// Repositories
 
 	users_repositories "town-planning-backend/users/repositories"
+	applicants_repositories "town-planning-backend/applicants/repositories"
 
 	// Routes
 
 	user_routes "town-planning-backend/users/routes"
+	applicant_routes "town-planning-backend/applicants/routes"
 
 	// bleve
 	bleveControllers "town-planning-backend/bleve/controllers"
@@ -136,10 +138,12 @@ func main() {
 	// Repositories
 	bleveIndexingService := bleveServices.NewIndexingService(config.Logger, indexPath)
 	userRepo := users_repositories.NewUserRepository(db)
+	applicantRepo := applicants_repositories.NewApplicantRepository(db)
 	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
 
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
+	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
 
 	// Bleve Routes
 	bleveController := bleveControllers.NewSearchController(bleveServiceRepo)
@@ -154,7 +158,7 @@ func main() {
 	go utils.RunScheduledCleanup(redisClient)
 
 	// // Re-Index all data
-	// bootstrap.IndexBleveData(ctx, userRepo, bleveInterfaceRepo)
+	// bootstrap.IndexBleveData(ctx, userRepo, applicantRepo, bleveInterfaceRepo)
 
 	// Run seeders for initial data
 	// config.RunAllSeeders(db)

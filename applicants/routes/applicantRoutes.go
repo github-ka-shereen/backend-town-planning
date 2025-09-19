@@ -1,0 +1,25 @@
+package routes
+
+import (
+	controllers "town-planning-backend/applicants/controllers"
+	"town-planning-backend/applicants/repositories"
+	indexing_repository "town-planning-backend/bleve/repositories"
+
+	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
+)
+
+func ApplicantInitRoutes(
+	app *fiber.App,
+	applicantRepo repositories.ApplicantRepository,
+	bleveInterfaceRepo indexing_repository.BleveRepositoryInterface,
+	db *gorm.DB,
+) {
+	applicantController := &controllers.ApplicantController{
+		ApplicantRepo: applicantRepo,
+		DB:            db,
+		BleveRepo:     bleveInterfaceRepo,
+	}
+
+	app.Post("/applicants", applicantController.CreateApplicantController)
+}
