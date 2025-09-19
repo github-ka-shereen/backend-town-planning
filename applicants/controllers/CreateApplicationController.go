@@ -7,6 +7,7 @@ import (
 	indexing_repository "town-planning-backend/bleve/repositories"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
+
 	// documents_services "town-planning-backend/documents/services"
 
 	"github.com/gofiber/fiber/v2"
@@ -15,23 +16,95 @@ import (
 )
 
 type ApplicantController struct {
-	ApplicantRepo      repositories.ApplicantRepository
-	DB                 *gorm.DB
-	Ctx                context.Context
-	BleveRepo          indexing_repository.BleveRepositoryInterface
+	ApplicantRepo repositories.ApplicantRepository
+	DB            *gorm.DB
+	Ctx           context.Context
+	BleveRepo     indexing_repository.BleveRepositoryInterface
 	// DocumentSvc        *documents_services.DocumentService
 	// ApplicationService services.ApplicationService
 }
 
+type CreateApplicantRequest struct {
+	ApplicantType                   models.ApplicantType                `json:"applicant_type"`
+	FirstName                       *string                             `json:"first_name"`
+	LastName                        *string                             `json:"last_name"`
+	MiddleName                      *string                             `json:"middle_name"`
+	OrganisationName                *string                             `json:"organisation_name"`
+	TaxIdentificationNumber         *string                             `json:"tax_identification_number"`
+	IdNumber                        *string                             `json:"id_number"`
+	Email                           string                              `json:"email"`
+	PhoneNumber                     string                              `json:"phone_number"`
+	WhatsAppNumber                  string                              `json:"whatsapp_number"`
+	PostalAddress                   *string                             `json:"postal_address"`
+	City                            *string                             `json:"city"`
+	Gender                          *string                             `json:"gender"`
+	CreatedBy                       string                              `json:"created_by"`
+	OrganisationRepresentatives     []OrganisationRepresentativeRequest `json:"organisation_representatives"`
+	ApplicantAdditionalPhoneNumbers []AdditionalPhoneRequest            `json:"applicant_additional_phone_numbers"`
+}
+
+type OrganisationRepresentativeRequest struct {
+	FirstName   string `json:"first_name"`
+	LastName    string `json:"last_name"`
+	Email       string `json:"email"`
+	PhoneNumber string `json:"phone_number"`
+	Role        string `json:"role"`
+}
+
+type AdditionalPhoneRequest struct {
+	PhoneNumber string `json:"phone_number"`
+}
+
 func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
-	var applicant models.Applicant
+	var request CreateApplicantRequest
 
 	// Parse incoming JSON payload
-	if err := c.BodyParser(&applicant); err != nil {
+	if err := c.BodyParser(&request); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Invalid request payload",
 			"error":   err.Error(),
 		})
+	}
+
+	// Map DTO to GORM model
+	applicant := models.Applicant{
+		ApplicantType:           request.ApplicantType,
+		FirstName:               request.FirstName,
+		LastName:                request.LastName,
+		MiddleName:              request.MiddleName,
+		OrganisationName:        request.OrganisationName,
+		TaxIdentificationNumber: request.TaxIdentificationNumber,
+		IdNumber:                request.IdNumber,
+		Email:                   request.Email,
+		PhoneNumber:             request.PhoneNumber,
+		WhatsAppNumber:          &request.WhatsAppNumber,
+		PostalAddress:           request.PostalAddress,
+		City:                    request.City,
+		Gender:                  request.Gender,
+		CreatedBy:               request.CreatedBy,
+		Status:                  models.ProspectiveApplicant, // Set default status
+	}
+
+	// Map organisation representatives
+	for _, repReq := range request.OrganisationRepresentatives {
+		rep := models.OrganisationRepresentative{
+			FirstName:   repReq.FirstName,
+			LastName:    repReq.LastName,
+			Email:       repReq.Email,
+			PhoneNumber: repReq.PhoneNumber,
+			Role:        repReq.Role,
+			CreatedBy:   request.CreatedBy,
+		}
+		applicant.OrganisationRepresentatives = append(applicant.OrganisationRepresentatives, rep)
+	}
+
+	// Map additional phone numbers
+	for _, phoneReq := range request.ApplicantAdditionalPhoneNumbers {
+		phone := models.ApplicantAdditionalPhone{
+			PhoneNumber: phoneReq.PhoneNumber,
+			CreatedBy:   request.CreatedBy,
+		}
+		applicant.AdditionalPhoneNumbers = append(applicant.AdditionalPhoneNumbers, phone)
 	}
 
 	// Validate applicant type
@@ -41,27 +114,13 @@ func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate the client data
+	// Validate the applicant data
 	validationError := services.ValidateApplicant(&applicant)
 	if validationError != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Validation failed",
 			"error":   validationError,
 		})
-	}
-
-	// Check if there are additional phone numbers and set their created_by to the client's created_by
-	if len(applicant.AdditionalPhoneNumbers) > 0 {
-		for i := range applicant.AdditionalPhoneNumbers {
-			applicant.AdditionalPhoneNumbers[i].CreatedBy = applicant.CreatedBy
-		}
-	}
-
-	// Check if there are company representatives and set their created_by to the client's created_by
-	if len(applicant.OrganisationRepresentatives) > 0 {
-		for i := range applicant.OrganisationRepresentatives {
-			applicant.OrganisationRepresentatives[i].CreatedBy = applicant.CreatedBy
-		}
 	}
 
 	// --- Start Database Transaction ---
@@ -74,28 +133,21 @@ func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
 		})
 	}
 
-	// Defer rollback in case of error or panic
 	defer func() {
 		if r := recover(); r != nil {
 			tx.Rollback()
 			config.Logger.Error("Panic detected, rolling back transaction", zap.Any("panic_reason", r))
 			panic(r)
 		}
-		if tx.Error != nil {
-			config.Logger.Warn("Transaction not committed, attempting rollback due to prior error", zap.Error(tx.Error))
-			tx.Rollback()
-		}
 	}()
-
 
 	// Save the applicant to the database
 	createdApplicant, err := ac.ApplicantRepo.CreateApplicant(tx, &applicant)
 	if err != nil {
-		// The defer will handle the rollback here.
+		tx.Rollback()
 		config.Logger.Error("Failed to create applicant in database", zap.Error(err), zap.String("applicantName", applicant.FullName))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Something went wrong while creating user in the database",
-			"data":    nil,
+			"message": "Something went wrong while creating applicant in the database",
 			"error":   err.Error(),
 		})
 	}
@@ -104,33 +156,18 @@ func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
 	if ac.BleveRepo != nil {
 		err := ac.BleveRepo.IndexSingleApplicant(*createdApplicant)
 		if err != nil {
-			// Explicit rollback
 			tx.Rollback()
 			config.Logger.Error(
-				"CRITICAL: Failed to index applicant in Bleve. Rolling back database transaction.",
+				"Failed to index applicant in Bleve. Rolling back database transaction.",
 				zap.Error(err),
 				zap.String("applicantID", createdApplicant.ID.String()),
-				zap.String("applicantName", createdApplicant.FullName),
 			)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"message": "Client could not be created because indexing failed. Please try again or contact support.",
+				"message": "Applicant could not be created because indexing failed",
 				"error":   err.Error(),
 			})
-		} else {
-			config.Logger.Info("Successfully indexed applicant in Bleve", zap.String("applicantID", createdApplicant.ID.String()))
 		}
-	} else {
-		// Explicit rollback for missing IndexingService
-		tx.Rollback()
-		config.Logger.Error(
-			"IndexingService is nil, cannot index applicant. Rolling back transaction.",
-			zap.String("applicantID", createdApplicant.ID.String()),
-			zap.String("applicantName", createdApplicant.FullName),
-		)
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Server configuration error: Indexing service not available. Cannot create applicant.",
-			"error":   "indexing_service_not_configured",
-		})
+		config.Logger.Info("Successfully indexed applicant in Bleve", zap.String("applicantID", createdApplicant.ID.String()))
 	}
 
 	// --- Commit Database Transaction ---
@@ -142,9 +179,8 @@ func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
 		})
 	}
 
-	// Return the created client
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"message": "Client successfully created",
+		"message": "Applicant successfully created",
 		"data":    createdApplicant,
 	})
 }

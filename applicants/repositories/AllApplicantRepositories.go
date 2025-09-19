@@ -57,7 +57,7 @@ func (ar *applicantRepository) CreateApplicant(tx *gorm.DB, applicant *models.Ap
 			zap.String("status", string(applicant.Status)))
 	}
 
-	// Create the applicant
+	// Create the applicant with associations
 	if err := tx.Create(applicant).Error; err != nil {
 		config.Logger.Error("Failed to create applicant",
 			zap.Error(err),
@@ -65,8 +65,20 @@ func (ar *applicantRepository) CreateApplicant(tx *gorm.DB, applicant *models.Ap
 		return nil, fmt.Errorf("failed to create applicant: %w", err)
 	}
 
+	// If you need to load the relationships after creation:
+	if err := tx.Preload("OrganisationRepresentatives").
+		Preload("AdditionalPhoneNumbers").
+		First(applicant, applicant.ID).Error; err != nil {
+		config.Logger.Error("Failed to load applicant relationships",
+			zap.Error(err),
+			zap.String("applicantID", applicant.ID.String()))
+		return nil, fmt.Errorf("failed to load applicant relationships: %w", err)
+	}
+
 	config.Logger.Info("Created applicant successfully",
-		zap.String("applicantID", applicant.ID.String()))
+		zap.String("applicantID", applicant.ID.String()),
+		zap.Int("representatives", len(applicant.OrganisationRepresentatives)),
+		zap.Int("phoneNumbers", len(applicant.AdditionalPhoneNumbers)))
 
 	return applicant, nil
 }

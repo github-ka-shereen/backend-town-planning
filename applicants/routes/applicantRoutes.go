@@ -21,5 +21,8 @@ func ApplicantInitRoutes(
 		BleveRepo:     bleveInterfaceRepo,
 	}
 
-	app.Post("/applicants", applicantController.CreateApplicantController)
+	// Create API v1 group
+	api := app.Group("/api/v1")
+	
+	api.Post("/applicants", applicantController.CreateApplicantController)
 }

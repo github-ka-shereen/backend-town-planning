@@ -17,20 +17,20 @@ import (
 // allModels defines all models that should be migrated and have permissions generated
 // This is the only place you need to add new models
 var allModels = []interface{}{
-	// Core Authentication and Authorization Models
-	&models.Permission{},
-	&models.Role{},
-	&models.RolePermission{},
-	&models.Department{},
-	&models.User{},
-	&models.UserAuditLog{},
+	// // Core Authentication and Authorization Models
+	// &models.Permission{},
+	// &models.Role{},
+	// &models.RolePermission{},
+	// &models.Department{},
+	// &models.User{},
+	// &models.UserAuditLog{},
 
-	// Applicants (when uncommented)
+	// // Applicants (when uncommented)
 	// &models.Applicant{},
 	// &models.OrganisationRepresentative{},
 	// &models.ApplicantDocument{},
-	// &models.ApplicantAdditionalPhoneNumbers{},
-	// &models.ApplicantOrganisationRepresentative{},
+	// &models.ApplicantAdditionalPhone{},
+	// &models.OrganisationRepresentative{},
 
 	// Applications (when uncommented)
 	// &models.Application{},
@@ -111,63 +111,63 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // ===== END OF CLEANUP CODE =====
 
-	// // Auto-migrate all models using the allModels slice
-	// err = db.AutoMigrate(allModels...)
-	// if err != nil {
-	// 	log.Fatalf("failed to migrate tables: %v", err)
-	// } else {
-	// 	log.Println("Tables migrated successfully")
-	// }
+	// Auto-migrate all models using the allModels slice
+	err = db.AutoMigrate(allModels...)
+	if err != nil {
+		log.Fatalf("failed to migrate tables: %v", err)
+	} else {
+		log.Println("Tables migrated successfully")
+	}
 
 	// ===== Auto-generate permissions for all models =====
-	// Simplified manual skip list - only for special non-join tables
-	skipList := map[string]bool{
-		"permissions":     true, // Don't generate permissions for permissions themselves
-		"user_audit_logs": true, // Audit table (not a join table but should be skipped)
-		// Add other non-join tables to skip here
-	}
+	// // Simplified manual skip list - only for special non-join tables
+	// skipList := map[string]bool{
+	// 	"permissions":     true, // Don't generate permissions for permissions themselves
+	// 	"user_audit_logs": true, // Audit table (not a join table but should be skipped)
+	// 	// Add other non-join tables to skip here
+	// }
 
-	log.Println("[PERMISSIONS] Starting automatic CRUD permission generation...")
+	// log.Println("[PERMISSIONS] Starting automatic CRUD permission generation...")
 
-	// Generate permissions for each model automatically
-	for _, model := range allModels {
-		modelType := reflect.TypeOf(model)
-		if modelType.Kind() == reflect.Ptr {
-			modelType = modelType.Elem()
-		}
+	// // Generate permissions for each model automatically
+	// for _, model := range allModels {
+	// 	modelType := reflect.TypeOf(model)
+	// 	if modelType.Kind() == reflect.Ptr {
+	// 		modelType = modelType.Elem()
+	// 	}
 
-		// Get the actual GORM table name
-		stmt := &gorm.Statement{DB: db}
-		stmt.Parse(model)
-		tableName := stmt.Schema.Table
+	// 	// Get the actual GORM table name
+	// 	stmt := &gorm.Statement{DB: db}
+	// 	stmt.Parse(model)
+	// 	tableName := stmt.Schema.Table
 
-		// DEBUG: Print the actual table name
-		log.Printf("[DEBUG] Model: %s, Table: %s", modelType.Name(), tableName)
+	// 	// DEBUG: Print the actual table name
+	// 	log.Printf("[DEBUG] Model: %s, Table: %s", modelType.Name(), tableName)
 
-		// Check if this is a join table using improved detection and skip it
-		if isJoinTable(modelType) {
-			log.Printf("[PERMISSIONS] 🔗 Skipping join table: %s (no permissions needed)", tableName)
-			continue
-		}
+	// 	// Check if this is a join table using improved detection and skip it
+	// 	if isJoinTable(modelType) {
+	// 		log.Printf("[PERMISSIONS] 🔗 Skipping join table: %s (no permissions needed)", tableName)
+	// 		continue
+	// 	}
 
-		// Also check the manual skip list for non-join tables that should be skipped
-		if skipList[tableName] {
-			log.Printf("[PERMISSIONS] Skipping table (manual skip list): %s", tableName)
-			continue
-		}
+	// 	// Also check the manual skip list for non-join tables that should be skipped
+	// 	if skipList[tableName] {
+	// 		log.Printf("[PERMISSIONS] Skipping table (manual skip list): %s", tableName)
+	// 		continue
+	// 	}
 
-		// Use the model struct name as the resource (e.g., "User" -> "users")
-		resource := Pluralize(strings.ToLower(modelType.Name()))
-		category := strings.ToLower(modelType.Name()) + "_management"
+	// 	// Use the model struct name as the resource (e.g., "User" -> "users")
+	// 	resource := Pluralize(strings.ToLower(modelType.Name()))
+	// 	category := strings.ToLower(modelType.Name()) + "_management"
 
-		if err := GenerateModelPermissions(db, resource, category, "system"); err != nil {
-			log.Printf("[PERMISSIONS] Failed to generate permissions for %s: %v", resource, err)
-		} else {
-			log.Printf("[PERMISSIONS] ✅ Generated CRUD permissions for: %s", resource)
-		}
-	}
+	// 	if err := GenerateModelPermissions(db, resource, category, "system"); err != nil {
+	// 		log.Printf("[PERMISSIONS] Failed to generate permissions for %s: %v", resource, err)
+	// 	} else {
+	// 		log.Printf("[PERMISSIONS] ✅ Generated CRUD permissions for: %s", resource)
+	// 	}
+	// }
 
-	log.Println("[PERMISSIONS] Automatic permission generation completed")
+	// log.Println("[PERMISSIONS] Automatic permission generation completed")
 
 	// ===== END OF PERMISSIONS GENERATION =====
 

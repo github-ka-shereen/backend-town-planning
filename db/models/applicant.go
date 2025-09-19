@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type ApplicantType string
@@ -119,6 +120,34 @@ type ApplicantOrganisationRepresentative struct {
 // TableName overrides default table name for join table
 func (ApplicantOrganisationRepresentative) TableName() string {
 	return "applicant_organisation_representatives"
+}
+
+func (a *Applicant) BeforeCreate(tx *gorm.DB) (err error) {
+	if a.ID == uuid.Nil {
+		a.ID = uuid.New()
+	}
+	return
+}
+
+func (ad *ApplicantDocument) BeforeCreate(tx *gorm.DB) (err error) {
+	if ad.ID == uuid.Nil {
+		ad.ID = uuid.New()
+	}
+	return
+}
+
+func (ap *ApplicantAdditionalPhone) BeforeCreate(tx *gorm.DB) (err error) {
+	if ap.ID == uuid.Nil {
+		ap.ID = uuid.New()
+	}
+	return
+}
+
+func (or *OrganisationRepresentative) BeforeCreate(tx *gorm.DB) (err error) {
+	if or.ID == uuid.Nil {
+		or.ID = uuid.New()
+	}
+	return
 }
 
 // Helper method to get display name
