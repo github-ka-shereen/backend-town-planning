@@ -92,35 +92,32 @@ func ConfigureDatabase() *gorm.DB {
 
 	// If you need to drop specific tables in a particular order (like join tables first),
 	// you can add that logic here:
-	/*
-		// Drop join tables first to avoid foreign key constraints
-		if err := db.Migrator().DropTable("stand_swap_owners"); err != nil {
-			log.Printf("Failed to drop stand_swap_owners join table: %v", err)
-		}
 
-		// Then drop other specific tables
-		specificTablesToDrop := []string{
-			"communication_recipients",
-			"communication_attachments",
-			"communication_groups",
-			"communications",
-		}
+	// Drop join tables first to avoid foreign key constraints
+	// if err := db.Migrator().DropTable("stand_swap_owners"); err != nil {
+	// 	log.Printf("Failed to drop stand_swap_owners join table: %v", err)
+	// }
 
-		for _, table := range specificTablesToDrop {
-			if err := db.Migrator().DropTable(table); err != nil {
-				log.Printf("Failed to drop table %s: %v", table, err)
-			}
-		}
-	*/
-	// ===== END OF CLEANUP CODE =====
+	// // Then drop other specific tables
+	// specificTablesToDrop := []string{
+	// 	"departments",
+	// }
 
-	// Auto-migrate all models using the allModels slice
-	err = db.AutoMigrate(allModels...)
-	if err != nil {
-		log.Fatalf("failed to migrate tables: %v", err)
-	} else {
-		log.Println("Tables migrated successfully")
-	}
+	// for _, table := range specificTablesToDrop {
+	// 	if err := db.Migrator().DropTable(table); err != nil {
+	// 		log.Printf("Failed to drop table %s: %v", table, err)
+	// 	}
+	// }
+
+	// // ===== END OF CLEANUP CODE =====
+
+	// // Auto-migrate all models using the allModels slice
+	// err = db.AutoMigrate(allModels...)
+	// if err != nil {
+	// 	log.Fatalf("failed to migrate tables: %v", err)
+	// } else {
+	// 	log.Println("Tables migrated successfully")
+	// }
 
 	// ===== Auto-generate permissions for all models =====
 	// Simplified manual skip list - only for special non-join tables
