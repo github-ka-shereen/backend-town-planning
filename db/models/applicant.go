@@ -120,3 +120,11 @@ type ApplicantOrganisationRepresentative struct {
 func (ApplicantOrganisationRepresentative) TableName() string {
 	return "applicant_organisation_representatives"
 }
+
+// Helper method to get display name
+func (c *Applicant) GetFullName() string {
+	if c.ApplicantType == OrganisationApplicant && c.OrganisationName != nil {
+		return *c.OrganisationName
+	}
+	return *c.FirstName + " " + *c.LastName
+}

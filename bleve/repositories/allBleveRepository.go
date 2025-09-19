@@ -19,6 +19,12 @@ type BleveRepositoryInterface interface {
 	IndexExistingUsers(users []models.User) error
 	UpdateUser(user models.User) error
 	DeleteUser(userID string) error
+
+	// ==== Applicant Indexing ====
+	IndexSingleApplicant(applicant models.Applicant) error
+	IndexExistingApplicants(applicants []models.Applicant) error
+	UpdateApplicant(applicant models.Applicant) error
+	DeleteApplicant(applicantID string) error
 }
 
 // Constructor returning both the struct and the interface
