@@ -10,6 +10,7 @@ import (
 	"town-planning-backend/utils"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -21,28 +22,26 @@ type UserController struct {
 	BleveRepo indexing_repository.BleveRepositoryInterface
 }
 
-type UserBleveDocument struct {
-	ID        string `json:"id"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Email     string `json:"email"`
-	Phone     string `json:"phone"`
+// CreateUserRequest represents the request body for user creation
+type CreateUserRequest struct {
+	FirstName      string  `json:"first_name" validate:"required,min=2,max=100"`
+	LastName       string  `json:"last_name" validate:"required,min=2,max=100"`
+	Email          string  `json:"email" validate:"required,email"`
+	Phone          string  `json:"phone" validate:"required,e164"`
+	WhatsAppNumber *string `json:"whatsapp_number" validate:"omitempty,e164"`
+	Password       string  `json:"password" validate:"required,min=8"`
+	RoleID         string  `json:"role_id" validate:"required,uuid4"`
+	DepartmentID   *string `json:"department_id" validate:"omitempty,uuid4"`
+	Active         bool    `json:"active"`
+	IsSuspended    bool    `json:"is_suspended"`
+	AuthMethod     string  `json:"auth_method" validate:"oneof=magic_link password authenticator"`
+	CreatedBy      string  `json:"created_by" validate:"required"`
 }
 
 func (uc *UserController) CreateUser(c *fiber.Ctx) error {
-	var user models.User
+	var req CreateUserRequest
 
-	// Hash the password before saving
-	hashedPassword, err := services.HashPassword(user.Password)
-	if err != nil {
-		return err
-	}
-
-	// Create a new user struct for DB operations
-	dbUser := user
-	dbUser.Password = hashedPassword // Store the hashed password in the Password field
-
-	if err := c.BodyParser(&user); err != nil {
+	if err := c.BodyParser(&req); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Invalid request body",
 			"data":    nil,
@@ -50,8 +49,8 @@ func (uc *UserController) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// --- Input Validation ---
-	if validationError := services.ValidateUser(&user); validationError != "" {
+	// Validate password strength
+	if validationError := services.ValidatePassword(req.Password); validationError != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Validation error: " + validationError,
 			"data":    nil,
@@ -59,7 +58,8 @@ func (uc *UserController) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	if validationError := services.ValidatePassword(user.Password); validationError != "" {
+	// Validate email against existing users
+	if validationError := services.ValidateEmail(req.Email, uc.UserRepo); validationError != "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"message": "Validation error: " + validationError,
 			"data":    nil,
@@ -67,13 +67,54 @@ func (uc *UserController) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate email against existing users in the database
-	if validationError := services.ValidateEmail(user.Email, uc.UserRepo); validationError != "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"message": "Validation error: " + validationError,
+	// Hash the password
+	hashedPassword, err := services.HashPassword(req.Password)
+	if err != nil {
+		config.Logger.Error("Failed to hash password", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"message": "Internal server error",
 			"data":    nil,
-			"error":   validationError,
+			"error":   "password_hashing_failed",
 		})
+	}
+
+	// Parse UUIDs
+	roleID, err := uuid.Parse(req.RoleID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"message": "Invalid role ID format",
+			"data":    nil,
+			"error":   "invalid_role_id",
+		})
+	}
+
+	var departmentID *uuid.UUID
+	if req.DepartmentID != nil {
+		deptID, err := uuid.Parse(*req.DepartmentID)
+		if err != nil {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"message": "Invalid department ID format",
+				"data":    nil,
+				"error":   "invalid_department_id",
+			})
+		}
+		departmentID = &deptID
+	}
+
+	// Create user model
+	user := models.User{
+		FirstName:      req.FirstName,
+		LastName:       req.LastName,
+		Email:          req.Email,
+		Phone:          req.Phone,
+		WhatsAppNumber: req.WhatsAppNumber,
+		Password:       hashedPassword,
+		RoleID:         roleID,
+		DepartmentID:   departmentID,
+		Active:         req.Active,
+		IsSuspended:    req.IsSuspended,
+		AuthMethod:     models.AuthMethod(req.AuthMethod),
+		CreatedBy:      req.CreatedBy,
 	}
 
 	// --- Start Database Transaction ---
@@ -87,105 +128,105 @@ func (uc *UserController) CreateUser(c *fiber.Ctx) error {
 		})
 	}
 
-	// IMPORTANT: Defer rollback. This will be executed if the function returns early
-	// due to an error, or if an explicit commit hasn't happened.
 	defer func() {
-		if r := recover(); r != nil { // Catch panics
+		if r := recover(); r != nil {
 			tx.Rollback()
 			config.Logger.Error("Panic detected, rolling back transaction", zap.Any("panic_reason", r))
-			panic(r) // Re-throw the panic
-		}
-		if tx.Error != nil {
-			config.Logger.Warn("Transaction not committed, attempting rollback due to prior error", zap.Error(tx.Error))
-			tx.Rollback() // Ensures rollback if any error occurred before successful commit
+			panic(r)
 		}
 	}()
 
-	// Use a new repository instance tied to the transaction
+	// Use transaction-bound repository
 	txUserRepo := repositories.NewUserRepository(tx)
 
-	// --- Database User Creation ---
+	// Create user in database
 	createdUser, err := txUserRepo.CreateUser(&user)
 	if err != nil {
-		// The defer will handle the rollback here.
+		tx.Rollback()
 		config.Logger.Error("Failed to create user in database", zap.Error(err), zap.String("email", user.Email))
+
+		if err.Error() == "a user with that email already exists" {
+			return c.Status(fiber.StatusConflict).JSON(fiber.Map{
+				"message": "A user with this email already exists",
+				"data":    nil,
+				"error":   "email_already_exists",
+			})
+		}
+
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Something went wrong while creating user in the database",
+			"message": "Failed to create user",
 			"data":    nil,
 			"error":   err.Error(),
 		})
 	}
 
-	user = *createdUser // Update the local 'user' variable to match the createdUser, especially if other fields like CreatedAt were populated by GORM.
-
-	// Invalidate cache (if applicable)
-	utils.InvalidateCacheAsync("user")
-
-	// --- Bleve Indexing  ---
+	// --- Bleve Indexing ---
 	if uc.BleveRepo != nil {
 		err := uc.BleveRepo.IndexSingleUser(*createdUser)
 		if err != nil {
-			// Explicit rollback (though defer would catch it too)
 			tx.Rollback()
 			config.Logger.Error(
-				"CRITICAL: Failed to index user in Bleve. Rolling back database transaction.",
+				"Failed to index user in Bleve. Rolling back transaction.",
 				zap.Error(err),
 				zap.String("userID", createdUser.ID.String()),
-				zap.String("userEmail", createdUser.Email),
 			)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-				"message": "User could not be created because indexing failed. Please try again or contact support.",
+				"message": "User creation failed due to indexing error",
 				"data":    nil,
-				"error":   err.Error(),
+				"error":   "indexing_failed",
 			})
-		} else {
-			config.Logger.Info("Successfully indexed user in Bleve", zap.String("userID", createdUser.ID.String()), zap.String("userEmail", createdUser.Email))
 		}
 	} else {
-		// Explicit rollback for missing IndexingService
 		tx.Rollback()
 		config.Logger.Error(
-			"IndexingService is nil, cannot index user. Rolling back transaction.",
+			"IndexingService is nil, cannot index user",
 			zap.String("userID", createdUser.ID.String()),
-			zap.String("userEmail", createdUser.Email),
 		)
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Server configuration error: Indexing service not available. Cannot create user.",
+			"message": "Server configuration error",
 			"data":    nil,
 			"error":   "indexing_service_not_configured",
 		})
 	}
 
-	// --- Commit Database Transaction ---
-	// If we reach here, both DB creation and Bleve indexing were successful (or Bleve was skipped due to nil service and that's an error).
-	// Now, explicitly commit the transaction.
+	// --- Commit Transaction ---
 	if err := tx.Commit().Error; err != nil {
-		// If commit fails, the defer will catch tx.Error and try to rollback,
-		// but usually a commit failure is severe (e.g., connection lost).
-		config.Logger.Error("Failed to commit database transaction", zap.Error(err))
+		config.Logger.Error("Failed to commit transaction", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Internal server error: Could not commit database transaction",
+			"message": "Failed to finalize user creation",
 			"data":    nil,
 			"error":   err.Error(),
 		})
 	}
 
-	// Prepare user data to return, excluding sensitive info like password
-	userWithoutPassword := models.User{
-		Active:    createdUser.Active,
-		FirstName: createdUser.FirstName,
-		LastName:  createdUser.LastName,
-		Email:     createdUser.Email,
-		Phone:     createdUser.Phone,
-		Role:      createdUser.Role,
-		CreatedAt: createdUser.CreatedAt,
-		CreatedBy: createdUser.CreatedBy,
-		ID:        createdUser.ID,
+	// Invalidate cache
+	utils.InvalidateCacheAsync("user")
+
+	// Prepare response without sensitive data
+	responseUser := map[string]interface{}{
+		"id":           createdUser.ID,
+		"first_name":   createdUser.FirstName,
+		"last_name":    createdUser.LastName,
+		"email":        createdUser.Email,
+		"phone":        createdUser.Phone,
+		"active":       createdUser.Active,
+		"is_suspended": createdUser.IsSuspended,
+		"auth_method":  createdUser.AuthMethod,
+		"role_id":      createdUser.RoleID,
+		"created_by":   createdUser.CreatedBy,
+		"created_at":   createdUser.CreatedAt,
+	}
+
+	if createdUser.DepartmentID != nil {
+		responseUser["department_id"] = createdUser.DepartmentID
+	}
+	if createdUser.WhatsAppNumber != nil {
+		responseUser["whatsapp_number"] = createdUser.WhatsAppNumber
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"message": "User created successfully",
-		"data":    userWithoutPassword,
+		"data":    responseUser,
 		"error":   nil,
 	})
 }

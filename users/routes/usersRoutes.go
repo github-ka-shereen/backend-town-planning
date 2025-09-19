@@ -106,6 +106,8 @@ func InitRoutes(
 			userRoutes.Get("/permissions", userController.GetAllPermissionsController)
 			userRoutes.Post("/roles", userController.CreateRoleWithPermissionsController)
 			userRoutes.Post("/departments", userController.CreateDepartmentController)
+			userRoutes.Get("/departments", userController.GetDepartmentsAllController)
+			userRoutes.Get("/roles", userController.GetAllRolesController)
 
 			// ID-based routes with validation
 			userRoutes.Get("/:id", userController.RetrieveSingleUserController)

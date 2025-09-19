@@ -3,7 +3,7 @@ package repositories
 import (
 	"errors"
 	"fmt"
-	"time"
+	"strings"
 	"town-planning-backend/db/models"
 
 	"github.com/google/uuid"
@@ -20,10 +20,11 @@ type UserRepository interface {
 	DeleteUser(id string) error
 	GetAllUsers() ([]models.User, error)
 	GetAllPermissions() ([]models.Permission, error)
-	GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error)
 	GetAllRoles() ([]models.Role, error)
 	GetRoleWithPermissionsByID(roleID string) (*models.Role, error)
 	CreateDepartment(department *models.Department) (*models.Department, error)
+	GetDepartmentsAll() ([]models.Department, error)
+	GetFilteredUsers(pageSize int, offset int, filters map[string]string) ([]models.User, int64, error)
 }
 
 // Implementations
@@ -33,6 +34,12 @@ type userRepository struct {
 
 func NewUserRepository(db *gorm.DB) UserRepository {
 	return &userRepository{db: db}
+}
+
+func (r *userRepository) GetDepartmentsAll() ([]models.Department, error) {
+	var departments []models.Department
+	err := r.db.Find(&departments).Error
+	return departments, err
 }
 
 func (r *userRepository) CreateDepartment(department *models.Department) (*models.Department, error) {
@@ -72,7 +79,6 @@ func (r *userRepository) CreateDepartment(department *models.Department) (*model
 	return department, nil
 }
 
-
 func (r *userRepository) GetRoleWithPermissionsByID(roleID string) (*models.Role, error) {
 	var role models.Role
 	err := r.db.Preload("Permissions.Permission").Where("id = ?", roleID).First(&role).Error
@@ -101,36 +107,39 @@ func CheckPasswordHash(password, hash string) bool {
 	return err == nil
 }
 
-func (r *userRepository) GetFilteredUsers(startDate, endDate string, pageSize, page int) ([]models.User, int64, error) {
+func (r *userRepository) GetFilteredUsers(pageSize int, offset int, filters map[string]string) ([]models.User, int64, error) {
 	var users []models.User
-	var totalResults int64
+	var total int64
 
-	query := r.db.Model(&models.User{}).
-		Select("id, first_name, last_name, email, phone, active, created_at, last_updated_at")
+	db := r.db.Model(&models.User{}) // start a new query chain
 
-	// Add date range filter if both dates are provided
-	if startDate != "" && endDate != "" {
-		// Parse the end date and add one day to include the entire end date
-		endDateParsed, err := time.Parse("2006-01-02", endDate)
-		if err == nil {
-			endDatePlusOne := endDateParsed.Add(24 * time.Hour)
-			query = query.Where("created_at >= ? AND created_at < ?", startDate, endDatePlusOne.Format("2006-01-02"))
+	// Apply filters
+	for key, value := range filters {
+		switch key {
+		case "active":
+			if strings.ToLower(value) == "true" {
+				db = db.Where("is_active = ?", true)
+			} else if strings.ToLower(value) == "false" {
+				db = db.Where("is_active = ?", false)
+			}
+		case "start_date":
+			db = db.Where("created_at >= ?", value)
+		case "end_date":
+			db = db.Where("created_at <= ?", value)
 		}
 	}
 
-	// Get total count before pagination
-	if err := query.Count(&totalResults).Error; err != nil {
+	// Count total records with filters applied
+	if err := db.Count(&total).Error; err != nil {
 		return nil, 0, err
 	}
 
 	// Apply pagination
-	offset := (page - 1) * pageSize
-	err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&users).Error
-	if err != nil {
+	if err := db.Limit(pageSize).Offset(offset).Order("created_at desc").Preload("Role").Preload("Department").Find(&users).Error; err != nil {
 		return nil, 0, err
 	}
 
-	return users, totalResults, nil
+	return users, total, nil
 }
 
 func (r *userRepository) CreateUser(user *models.User) (*models.User, error) {
