@@ -18,45 +18,6 @@ const (
 	SurveyPlanDocument  DocumentType = "SURVEY_PLAN"
 )
 
-// Predefined document categories
-type PredefinedCategory string
-
-const (
-	// Legal and Identity Documents
-	TitleDeedCategory                PredefinedCategory = "TITLE_DEED"
-	IDCopyCategory                   PredefinedCategory = "ID_COPY"
-	OrganisationRegistrationCategory PredefinedCategory = "ORGANISATION_REGISTRATION"
-	PowerOfAttorneyCategory          PredefinedCategory = "POWER_OF_ATTORNEY"
-
-	// Planning Documents
-	BuildingPlansCategory         PredefinedCategory = "BUILDING_PLANS"
-	SurveyPlanCategory            PredefinedCategory = "SURVEY_PLAN"
-	SiteLayoutCategory            PredefinedCategory = "SITE_LAYOUT"
-	ArchitecturalDrawingsCategory PredefinedCategory = "ARCHITECTURAL_DRAWINGS"
-	StructuralDrawingsCategory    PredefinedCategory = "STRUCTURAL_DRAWINGS"
-
-	// Financial Documents
-	PaymentReceiptCategory  PredefinedCategory = "PAYMENT_RECEIPT"
-	RatesClearanceCategory  PredefinedCategory = "RATES_CLEARANCE"
-	AgreementOfSaleCategory PredefinedCategory = "AGREEMENT_OF_SALE"
-
-	// Technical Certificates
-	EngineeringCertificateCategory PredefinedCategory = "ENGINEERING_CERTIFICATE"
-	LimpimCertificateCategory      PredefinedCategory = "LIMPIM_CERTIFICATE"
-	EnvironmentalClearanceCategory PredefinedCategory = "ENVIRONMENTAL_CLEARANCE"
-
-	// Application Forms
-	TPDFormCategory         PredefinedCategory = "TPD_FORM"
-	ApplicationFormCategory PredefinedCategory = "APPLICATION_FORM"
-
-	// Communication
-	CorrespondenceCategory PredefinedCategory = "CORRESPONDENCE"
-	NotificationCategory   PredefinedCategory = "NOTIFICATION"
-
-	// Other
-	OtherDocumentCategory PredefinedCategory = "OTHER"
-)
-
 // ActionType defines the type of action performed on a document
 type ActionType string
 
@@ -68,22 +29,36 @@ const (
 	ActionRestore ActionType = "RESTORE"
 )
 
+// DocumentCategory represents document categories (will be seeded)
+type DocumentCategory struct {
+	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	Name        string    `gorm:"type:varchar(100);not null;unique" json:"name"`
+	Description string    `gorm:"type:text" json:"description"`
+	IsSystem    bool      `gorm:"default:false" json:"is_system"` // System categories cannot be modified
+	IsActive    bool      `gorm:"default:true" json:"is_active"`
+
+	// Audit fields
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedBy string         `gorm:"not null" json:"created_by"`
+}
+
 // Document represents uploaded files associated with applicants or applications
 type Document struct {
-	ID                 uuid.UUID          `gorm:"type:uuid;primary_key;" json:"id"`
-	DocumentCode       *string            `gorm:"index" json:"document_code"`
-	FileName           string             `gorm:"not null" json:"file_name"`
-	DocumentType       DocumentType       `gorm:"type:varchar(30);not null" json:"document_type"`
-	CategoryID         *uuid.UUID         `gorm:"type:uuid;index" json:"category_id"`                // Reference to custom category
-	PredefinedCategory PredefinedCategory `gorm:"type:varchar(50);index" json:"predefined_category"` // For predefined categories
-	FileSize           int64              `gorm:"not null" json:"file_size"`
-	FilePath           string             `gorm:"not null" json:"file_path"`
-	FileHash           string             `gorm:"index" json:"file_hash"`
-	MimeType           string             `json:"mime_type"`
-	IsPublic           bool               `gorm:"default:false" json:"is_public"`
-	Description        *string            `gorm:"type:text" json:"description"`
-	IsMandatory        bool               `gorm:"default:true" json:"is_mandatory"`
-	IsActive           bool               `gorm:"default:true" json:"is_active"`
+	ID           uuid.UUID    `gorm:"type:uuid;primary_key;" json:"id"`
+	DocumentCode *string      `gorm:"index" json:"document_code"`
+	FileName     string       `gorm:"not null" json:"file_name"`
+	DocumentType DocumentType `gorm:"type:varchar(30);not null" json:"document_type"`
+	CategoryID   uuid.UUID    `gorm:"type:uuid;not null;index" json:"category_id"` // Required category reference
+	FileSize     int64        `gorm:"not null" json:"file_size"`
+	FilePath     string       `gorm:"not null" json:"file_path"`
+	FileHash     string       `gorm:"index" json:"file_hash"`
+	MimeType     string       `json:"mime_type"`
+	IsPublic     bool         `gorm:"default:false" json:"is_public"`
+	Description  *string      `gorm:"type:text" json:"description"`
+	IsMandatory  bool         `gorm:"default:true" json:"is_mandatory"`
+	IsActive     bool         `gorm:"default:true" json:"is_active"`
 
 	// Associations
 	ApplicantID   *uuid.UUID `gorm:"type:uuid;index" json:"applicant_id"`
@@ -100,13 +75,13 @@ type Document struct {
 	UpdatedBy    *string    `json:"updated_by"` // Who made the last update
 	LastAction   ActionType `gorm:"type:varchar(20);default:'CREATE'" json:"last_action"`
 
-	// Relationships - CORRECTED
-	Applicant   *Applicant      `gorm:"foreignKey:ApplicantID" json:"applicant,omitempty"`
-	Application *Application    `gorm:"foreignKey:ApplicationID" json:"application,omitempty"`
-	Previous    *Document       `gorm:"foreignKey:PreviousID" json:"previous,omitempty"`
-	Newer       []Document      `gorm:"foreignKey:PreviousID" json:"newer,omitempty"` // Documents that have this one as previous
-	Category    *CustomCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-	Original    *Document       `gorm:"foreignKey:OriginalID" json:"original,omitempty"`
+	// Relationships
+	Applicant   *Applicant        `gorm:"foreignKey:ApplicantID" json:"applicant,omitempty"`
+	Application *Application      `gorm:"foreignKey:ApplicationID" json:"application,omitempty"`
+	Previous    *Document         `gorm:"foreignKey:PreviousID" json:"previous,omitempty"`
+	Newer       []Document        `gorm:"foreignKey:PreviousID" json:"newer,omitempty"` // Documents that have this one as previous
+	Category    *DocumentCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
+	Original    *Document         `gorm:"foreignKey:OriginalID" json:"original,omitempty"`
 
 	// Audit trail relationship
 	AuditLogs []DocumentAuditLog `gorm:"foreignKey:DocumentID" json:"audit_logs,omitempty"`
@@ -132,21 +107,21 @@ type DocumentAuditLog struct {
 	UserAgent  *string    `json:"user_agent"`
 
 	// Document state before/after change
-	OldFileName           *string             `json:"old_file_name"`
-	OldPredefinedCategory *PredefinedCategory `json:"old_predefined_category"`
-	OldDescription        *string             `json:"old_description"`
-	OldIsPublic           *bool               `json:"old_is_public"`
-	OldIsMandatory        *bool               `json:"old_is_mandatory"`
-	OldIsActive           *bool               `json:"old_is_active"`
+	OldFileName    *string    `json:"old_file_name"`
+	OldCategoryID  *uuid.UUID `json:"old_category_id"`
+	OldDescription *string    `json:"old_description"`
+	OldIsPublic    *bool      `json:"old_is_public"`
+	OldIsMandatory *bool      `json:"old_is_mandatory"`
+	OldIsActive    *bool      `json:"old_is_active"`
 
-	NewFileName           *string             `json:"new_file_name"`
-	NewPredefinedCategory *PredefinedCategory `json:"new_predefined_category"`
-	NewDescription        *string             `json:"new_description"`
-	NewIsPublic           *bool               `json:"new_is_public"`
-	NewIsMandatory        *bool               `json:"new_is_mandatory"`
-	NewIsActive           *bool               `json:"new_is_active"`
+	NewFileName    *string    `json:"new_file_name"`
+	NewCategoryID  *uuid.UUID `json:"new_category_id"`
+	NewDescription *string    `json:"new_description"`
+	NewIsPublic    *bool      `json:"new_is_public"`
+	NewIsMandatory *bool      `json:"new_is_mandatory"`
+	NewIsActive    *bool      `json:"new_is_active"`
 
-	// Relationship - CORRECTED
+	// Relationship
 	Document *Document `gorm:"foreignKey:DocumentID" json:"document,omitempty"`
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
@@ -166,29 +141,12 @@ type DocumentVersion struct {
 	UpdateReason     *string   `gorm:"type:text" json:"update_reason"`
 	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
 
-	// Relationships - CORRECTED
+	// Relationships
 	Document *Document `gorm:"foreignKey:DocumentID" json:"document,omitempty"`
 	Original *Document `gorm:"foreignKey:OriginalID" json:"original,omitempty"`
 }
 
-// CustomCategory represents user-defined document categories
-type CustomCategory struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	Name        string    `gorm:"type:varchar(100);not null" json:"name"`
-	Description string    `gorm:"type:text" json:"description"`
-	IsActive    bool      `gorm:"default:true" json:"is_active"`
-
-	// Relationships - REMOVED incorrect PredefinedCategory reference
-	// If you need to link to predefined categories, you should have a separate field
-	// PredefinedCategoryID *uuid.UUID `gorm:"type:uuid;index" json:"predefined_category_id"`
-
-	// Audit fields
-	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-	CreatedBy string         `gorm:"not null" json:"created_by"`
-}
-
+// BeforeCreate hooks for UUID generation
 func (d *Document) BeforeCreate(tx *gorm.DB) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
@@ -202,15 +160,9 @@ func (d *Document) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-func (d *Document) BeforeUpdate(tx *gorm.DB) error {
-	// This will be called automatically by GORM before updates
-	// You can add custom logic here if needed
-	return nil
-}
-
-func (c *CustomCategory) BeforeCreate(tx *gorm.DB) error {
-	if c.ID == uuid.Nil {
-		c.ID = uuid.New()
+func (dc *DocumentCategory) BeforeCreate(tx *gorm.DB) error {
+	if dc.ID == uuid.Nil {
+		dc.ID = uuid.New()
 	}
 	return nil
 }
@@ -228,3 +180,200 @@ func (dv *DocumentVersion) BeforeCreate(tx *gorm.DB) error {
 	}
 	return nil
 }
+
+// // SeedDocumentCategories populates the database with system document categories
+// func SeedDocumentCategories(db *gorm.DB, createdBy string) error {
+// 	categories := []DocumentCategory{
+// 		// Legal and Identity Documents
+// 		{
+// 			Name:        "TITLE_DEED",
+// 			Description: "Legal property title deed document",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "ID_COPY",
+// 			Description: "Identification document copy",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "ORGANISATION_REGISTRATION",
+// 			Description: "Organization registration documents",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "POWER_OF_ATTORNEY",
+// 			Description: "Power of attorney documentation",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Planning Documents
+// 		{
+// 			Name:        "BUILDING_PLANS",
+// 			Description: "Building plans and blueprints",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "SURVEY_PLAN",
+// 			Description: "Survey plan and land measurements",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "SITE_LAYOUT",
+// 			Description: "Site layout and planning documents",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "ARCHITECTURAL_DRAWINGS",
+// 			Description: "Architectural drawings and designs",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "STRUCTURAL_DRAWINGS",
+// 			Description: "Structural engineering drawings",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Financial Documents
+// 		{
+// 			Name:        "PAYMENT_RECEIPT",
+// 			Description: "Payment receipts and transaction records",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "RATES_CLEARANCE",
+// 			Description: "Rates clearance certificates",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "AGREEMENT_OF_SALE",
+// 			Description: "Agreement of sale contracts",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Technical Certificates
+// 		{
+// 			Name:        "ENGINEERING_CERTIFICATE",
+// 			Description: "Engineering certificates and approvals",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "LIMPIM_CERTIFICATE",
+// 			Description: "LIMPIM certificates and compliance documents",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "ENVIRONMENTAL_CLEARANCE",
+// 			Description: "Environmental clearance certificates",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Application Forms
+// 		{
+// 			Name:        "TPD_FORM",
+// 			Description: "TPD application forms",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "APPLICATION_FORM",
+// 			Description: "General application forms",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Communication
+// 		{
+// 			Name:        "CORRESPONDENCE",
+// 			Description: "Official correspondence and letters",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 		{
+// 			Name:        "NOTIFICATION",
+// 			Description: "Notifications and official communications",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+
+// 		// Other
+// 		{
+// 			Name:        "OTHER",
+// 			Description: "Other miscellaneous documents",
+// 			IsSystem:    true,
+// 			IsActive:    true,
+// 			CreatedBy:   createdBy,
+// 		},
+// 	}
+
+// 	for _, category := range categories {
+// 		// Check if category already exists
+// 		var existingCategory DocumentCategory
+// 		if err := db.Where("name = ?", category.Name).First(&existingCategory).Error; err != nil {
+// 			if err == gorm.ErrRecordNotFound {
+// 				// Category doesn't exist, create it
+// 				if err := db.Create(&category).Error; err != nil {
+// 					return err
+// 				}
+// 			} else {
+// 				return err
+// 			}
+// 		} else {
+// 			// Category exists, update it if needed (only non-system fields)
+// 			if existingCategory.IsSystem {
+// 				// For system categories, only update description and active status
+// 				if err := db.Model(&existingCategory).Updates(map[string]interface{}{
+// 					"description": category.Description,
+// 					"is_active":   category.IsActive,
+// 					"updated_at":  time.Now(),
+// 				}).Error; err != nil {
+// 					return err
+// 				}
+// 			} else {
+// 				// For custom categories, update all fields except IsSystem
+// 				if err := db.Model(&existingCategory).Updates(map[string]interface{}{
+// 					"description": category.Description,
+// 					"is_active":   category.IsActive,
+// 					"updated_at":  time.Now(),
+// 				}).Error; err != nil {
+// 					return err
+// 				}
+// 			}
+// 		}
+// 	}
+
+// 	return nil
+// }
