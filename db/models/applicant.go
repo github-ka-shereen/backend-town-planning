@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -29,6 +30,7 @@ type Applicant struct {
 	ApplicantType ApplicantType `json:"applicant_type"`
 	FirstName     *string       `json:"first_name"`
 	LastName      *string       `json:"last_name"`
+	FullName      string        `json:"full_name"`
 	MiddleName    *string       `json:"middle_name"`
 	DateOfBirth   *time.Time    `json:"date_of_birth"`
 	Gender        *string       `json:"gender"`
@@ -51,7 +53,6 @@ type Applicant struct {
 	IdNumber       *string         `json:"id_number"`
 	PhoneNumber    string          `json:"phone_number"`
 	Status         ApplicantStatus `json:"status"`
-	FullName       string          `json:"full_name" gorm:"-"`
 	Debtor         bool            `gorm:"default:false" json:"debtor"`
 
 	// Metadata
@@ -93,8 +94,8 @@ type OrganisationRepresentative struct {
 	ID             uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	FirstName      string    `json:"first_name"`
 	LastName       string    `json:"last_name"`
-	Email          *string    `json:"email"`
-	PhoneNumber    *string    `json:"phone_number"`
+	Email          *string   `json:"email"`
+	PhoneNumber    *string   `json:"phone_number"`
 	WhatsAppNumber *string   `json:"whatsapp_number"`
 	Role           string    `json:"role"`
 
@@ -126,6 +127,58 @@ func (a *Applicant) BeforeCreate(tx *gorm.DB) (err error) {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
 	}
+
+	// Set FullName based on ApplicantType
+	if a.ApplicantType == OrganisationApplicant {
+		if a.OrganisationName != nil {
+			a.FullName = strings.TrimSpace(*a.OrganisationName)
+		}
+	} else {
+		var nameParts []string
+
+		if a.FirstName != nil && strings.TrimSpace(*a.FirstName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.FirstName))
+		}
+
+		if a.MiddleName != nil && strings.TrimSpace(*a.MiddleName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.MiddleName))
+		}
+
+		if a.LastName != nil && strings.TrimSpace(*a.LastName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.LastName))
+		}
+
+		a.FullName = strings.Join(nameParts, " ")
+	}
+
+	return
+}
+
+// Add this BeforeUpdate method too:
+func (a *Applicant) BeforeUpdate(tx *gorm.DB) (err error) {
+	// Set FullName based on ApplicantType
+	if a.ApplicantType == OrganisationApplicant {
+		if a.OrganisationName != nil {
+			a.FullName = strings.TrimSpace(*a.OrganisationName)
+		}
+	} else {
+		var nameParts []string
+
+		if a.FirstName != nil && strings.TrimSpace(*a.FirstName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.FirstName))
+		}
+
+		if a.MiddleName != nil && strings.TrimSpace(*a.MiddleName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.MiddleName))
+		}
+
+		if a.LastName != nil && strings.TrimSpace(*a.LastName) != "" {
+			nameParts = append(nameParts, strings.TrimSpace(*a.LastName))
+		}
+
+		a.FullName = strings.Join(nameParts, " ")
+	}
+
 	return
 }
 

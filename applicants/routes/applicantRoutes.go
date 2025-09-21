@@ -25,4 +25,5 @@ func ApplicantInitRoutes(
 	api := app.Group("/api/v1")
 	
 	api.Post("/applicants", applicantController.CreateApplicantController)
+	api.Get("/applicants/filtered", applicantController.GetFilteredApplicantsController)
 }

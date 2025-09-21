@@ -13,6 +13,7 @@ import (
 type ApplicantRepository interface {
 	CreateApplicant(tx *gorm.DB, applicant *models.Applicant) (*models.Applicant, error)
 	GetAllApplicants() ([]models.Applicant, error)
+	GetFilteredApplicants(limit, offset int) ([]models.Applicant, int64, error)
 }
 
 type applicantRepository struct {
@@ -31,6 +32,23 @@ func (ar *applicantRepository) GetAllApplicants() ([]models.Applicant, error) {
 		return nil, fmt.Errorf("failed to get all applicants: %w", err)
 	}
 	return applicants, nil
+}
+
+func (ar *applicantRepository) GetFilteredApplicants(limit, offset int) ([]models.Applicant, int64, error) {
+	var applicants []models.Applicant
+	var total int64
+	
+	// Count total number of applicants
+	if err := ar.DB.Model(&models.Applicant{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch paginated applicants, ordered by UpdatedAt and CreatedAt (descending)
+	if err := ar.DB.Order("updated_at DESC, created_at DESC").Limit(limit).Offset(offset).Find(&applicants).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return applicants, total, nil
 }
 
 func (ar *applicantRepository) CreateApplicant(tx *gorm.DB, applicant *models.Applicant) (*models.Applicant, error) {
