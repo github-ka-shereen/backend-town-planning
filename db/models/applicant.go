@@ -93,8 +93,8 @@ type OrganisationRepresentative struct {
 	ID             uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	FirstName      string    `json:"first_name"`
 	LastName       string    `json:"last_name"`
-	Email          string    `json:"email"`
-	PhoneNumber    string    `json:"phone_number"`
+	Email          *string    `json:"email"`
+	PhoneNumber    *string    `json:"phone_number"`
 	WhatsAppNumber *string   `json:"whatsapp_number"`
 	Role           string    `json:"role"`
 

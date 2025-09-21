@@ -90,8 +90,8 @@ func (ac *ApplicantController) CreateApplicantController(c *fiber.Ctx) error {
 		rep := models.OrganisationRepresentative{
 			FirstName:   repReq.FirstName,
 			LastName:    repReq.LastName,
-			Email:       repReq.Email,
-			PhoneNumber: repReq.PhoneNumber,
+			Email:       &repReq.Email,
+			PhoneNumber: &repReq.PhoneNumber,
 			Role:        repReq.Role,
 			CreatedBy:   request.CreatedBy,
 		}
