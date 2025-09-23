@@ -73,6 +73,7 @@ type VATRate struct {
 	ValidFrom time.Time       `gorm:"not null;index" json:"valid_from"`
 	ValidTo   *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
 	IsActive  bool            `gorm:"default:true" json:"is_active"`
+	Used      bool            `gorm:"default:false" json:"used"`
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -82,8 +83,8 @@ type VATRate struct {
 
 // Application model
 type Application struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	PlanNumber  string    `gorm:"unique;not null;index" json:"plan_number"`
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	PlanNumber string    `gorm:"unique;not null;index" json:"plan_number"`
 
 	// Planning details
 	PlanArea *decimal.Decimal `gorm:"type:decimal(15,2)" json:"plan_area"`
@@ -206,4 +207,3 @@ func (v *VATRate) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 	return
 }
-
