@@ -69,7 +69,7 @@ type Tariff struct {
 // VATRate model with validity period
 type VATRate struct {
 	ID        uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
-	Rate      decimal.Decimal `gorm:"type:decimal(5,2);not null" json:"rate"` // Store as percentage (e.g., 15.00 for 15%)
+	Rate      decimal.Decimal `gorm:"type:decimal(5,2);not null" json:"rate"` // Store as percentage (e.g., 0.15 for 15%)
 	ValidFrom time.Time       `gorm:"not null;index" json:"valid_from"`
 	ValidTo   *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
 	IsActive  bool            `gorm:"default:true" json:"is_active"`
