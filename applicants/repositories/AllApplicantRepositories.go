@@ -18,6 +18,7 @@ type ApplicantRepository interface {
 	GetActiveVATRate(tx *gorm.DB) (*models.VATRate, error)
 	DeactivateVATRate(tx *gorm.DB, vatRateID uuid.UUID, createdBy string) (*models.VATRate, error)
 	CreateVATRate(tx *gorm.DB, vatRate *models.VATRate) (*models.VATRate, error)
+	GetFilteredVatRates(limit, offset int, filters map[string]string) ([]models.VATRate, int64, error)
 }
 
 type applicantRepository struct {
