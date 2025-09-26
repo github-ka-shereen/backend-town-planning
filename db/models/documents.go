@@ -63,12 +63,13 @@ type Document struct {
 	// Associations
 	ApplicantID   *uuid.UUID `gorm:"type:uuid;index" json:"applicant_id"`
 	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
-	StandID       *uuid.UUID `gorm:"type:uuid;index" json:"stand_id"` // New field
+	StandID       *uuid.UUID `gorm:"type:uuid;index" json:"stand_id"`
+	ProjectID     *uuid.UUID `gorm:"type:uuid;index" json:"project_id"`
 
-	// Enhanced Version Control
+	// Enhanced Version Control - FIXED: Self-referencing within Document table
 	Version          int        `gorm:"default:1" json:"version"`
-	PreviousID       *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"`
-	OriginalID       *uuid.UUID `gorm:"type:uuid;index" json:"original_id"` // Points to the first version
+	PreviousID       *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"` // References another Document
+	OriginalID       *uuid.UUID `gorm:"type:uuid;index" json:"original_id"` // References another Document
 	IsCurrentVersion bool       `gorm:"default:true;index" json:"is_current_version"`
 
 	// Update tracking
@@ -76,14 +77,20 @@ type Document struct {
 	UpdatedBy    *string    `json:"updated_by"` // Who made the last update
 	LastAction   ActionType `gorm:"type:varchar(20);default:'CREATE'" json:"last_action"`
 
-	// Relationships
-	Applicant   *Applicant        `gorm:"foreignKey:ApplicantID" json:"applicant,omitempty"`
-	Application *Application      `gorm:"foreignKey:ApplicationID" json:"application,omitempty"`
-	Previous    *Document         `gorm:"foreignKey:PreviousID" json:"previous,omitempty"`
-	Newer       []Document        `gorm:"foreignKey:PreviousID" json:"newer,omitempty"` // Documents that have this one as previous
-	Category    *DocumentCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-	Original    *Document         `gorm:"foreignKey:OriginalID" json:"original,omitempty"`
-	Stand       *Stand            `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	// Relationships - FIXED: Proper self-referencing constraints
+	Applicant   *Applicant   `gorm:"foreignKey:ApplicantID" json:"applicant,omitempty"`
+	Application *Application `gorm:"foreignKey:ApplicationID" json:"application,omitempty"`
+	Stand       *Stand       `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	Project     *Project     `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+
+	// Self-referencing relationships within Document table
+	Previous *Document `gorm:"foreignKey:PreviousID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"previous,omitempty"`
+	Original *Document `gorm:"foreignKey:OriginalID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"original,omitempty"`
+
+	// Reverse relationships
+	Newer    []Document        `gorm:"foreignKey:PreviousID" json:"newer,omitempty"`    // Documents that have this one as previous
+	Versions []Document        `gorm:"foreignKey:OriginalID" json:"versions,omitempty"` // All versions of this document
+	Category *DocumentCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
 
 	// Audit trail relationship
 	AuditLogs []DocumentAuditLog `gorm:"foreignKey:DocumentID" json:"audit_logs,omitempty"`
@@ -129,10 +136,9 @@ type DocumentAuditLog struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
-// DocumentVersion provides a consolidated view of document versions
 type DocumentVersion struct {
 	ID               uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	OriginalID       uuid.UUID `gorm:"type:uuid;not null;index" json:"original_id"`
+	BaseDocumentID   uuid.UUID `gorm:"type:uuid;not null;index" json:"base_document_id"`
 	DocumentID       uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
 	Version          int       `gorm:"not null" json:"version"`
 	FileName         string    `gorm:"not null" json:"file_name"`
@@ -143,9 +149,8 @@ type DocumentVersion struct {
 	UpdateReason     *string   `gorm:"type:text" json:"update_reason"`
 	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
 
-	// Relationships
-	Document *Document `gorm:"foreignKey:DocumentID" json:"document,omitempty"`
-	Original *Document `gorm:"foreignKey:OriginalID" json:"original,omitempty"`
+	Document *Document `gorm:"foreignKey:DocumentID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"document,omitempty"`
+	Base     *Document `gorm:"foreignKey:BaseDocumentID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"base,omitempty"`
 }
 
 // BeforeCreate hooks for UUID generation
@@ -154,7 +159,7 @@ func (d *Document) BeforeCreate(tx *gorm.DB) error {
 		d.ID = uuid.New()
 	}
 
-	// Set original ID for the first version
+	// Set original ID for the first version to point to itself
 	if d.OriginalID == nil {
 		d.OriginalID = &d.ID
 	}

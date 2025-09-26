@@ -17,30 +17,42 @@ import (
 // allModels defines all models that should be migrated and have permissions generated
 // This is the only place you need to add new models
 var allModels = []interface{}{
-	// // Core Authentication and Authorization Models
-	// &models.Permission{},
-	// &models.Role{},
-	// &models.RolePermission{},
-	// &models.Department{},
-	// &models.User{},
-	// &models.UserAuditLog{},
+	// Core Authentication and Authorization Models
+	&models.Permission{},
+	&models.Role{},
+	&models.RolePermission{},
+	&models.Department{},
+	&models.User{},
+	&models.UserAuditLog{},
 
-	// // Applicants (when uncommented)
-	// &models.Applicant{},
-	// &models.OrganisationRepresentative{},
-	// &models.ApplicantDocument{},
-	// &models.ApplicantAdditionalPhone{},
-	// &models.OrganisationRepresentative{},
+	// Document Management Models (standalone first)
+	&models.DocumentCategory{},
 
-	// Applications (when uncommented)
-	// &models.Application{},
-	// &models.ApplicationCategory{},
-	// &models.RequiredDocument{},
-	// &models.ApplicationReview{},
-	// &models.Comment{},
+	// Property and Stand Management Models (before Document since Document references them)
+	&models.PropertyType{},
+	&models.StandType{},
+	&models.Project{}, // This must come before Document
+	&models.Stand{},
+	&models.Applicant{}, // This must come before Document
 
-	// Documents (when uncommented)
-	// &models.Document{},
+	// Document models (after all referenced tables)
+	&models.Document{}, // Now has ProjectID field
+	&models.DocumentAuditLog{},
+	&models.DocumentVersion{},
+
+	// Applicant and Organisation Models
+	&models.OrganisationRepresentative{},
+	&models.ApplicantOrganisationRepresentative{},
+	&models.ApplicantAdditionalPhone{},
+
+	// Financial Models
+	&models.Tariff{},
+	&models.VATRate{},
+
+	// Application and Workflow Models (last as they reference many tables)
+	&models.Application{},
+	&models.Comment{},
+	&models.ApplicantDocument{},
 }
 
 func ConfigureDatabase() *gorm.DB {

@@ -44,10 +44,10 @@ type Project struct {
 	StandsSold      int        `gorm:"default:0" json:"stands_sold"`
 	StandsAvailable int        `gorm:"default:0" json:"stands_available"`
 
-	// Relationships
+	// Relationships - FIXED: Now Document has ProjectID field
 	Developer *Applicant `gorm:"foreignKey:DeveloperID" json:"developer,omitempty"`
 	Stands    []Stand    `gorm:"foreignKey:ProjectID" json:"stands,omitempty"`
-	Documents []Document `gorm:"foreignKey:ProjectID" json:"documents,omitempty"`
+	Documents []Document `gorm:"foreignKey:ProjectID" json:"documents,omitempty"` // This should now work
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
