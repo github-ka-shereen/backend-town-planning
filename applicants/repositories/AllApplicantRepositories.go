@@ -6,6 +6,7 @@ import (
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 
+	"github.com/google/uuid"
 	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
@@ -14,6 +15,9 @@ type ApplicantRepository interface {
 	CreateApplicant(tx *gorm.DB, applicant *models.Applicant) (*models.Applicant, error)
 	GetAllApplicants() ([]models.Applicant, error)
 	GetFilteredApplicants(limit, offset int) ([]models.Applicant, int64, error)
+	GetActiveVATRate(tx *gorm.DB) (*models.VATRate, error)
+	DeactivateVATRate(tx *gorm.DB, vatRateID uuid.UUID, createdBy string) (*models.VATRate, error)
+	CreateVATRate(tx *gorm.DB, vatRate *models.VATRate) (*models.VATRate, error)
 }
 
 type applicantRepository struct {
@@ -37,7 +41,7 @@ func (ar *applicantRepository) GetAllApplicants() ([]models.Applicant, error) {
 func (ar *applicantRepository) GetFilteredApplicants(limit, offset int) ([]models.Applicant, int64, error) {
 	var applicants []models.Applicant
 	var total int64
-	
+
 	// Count total number of applicants
 	if err := ar.DB.Model(&models.Applicant{}).Count(&total).Error; err != nil {
 		return nil, 0, err

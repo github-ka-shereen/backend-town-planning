@@ -25,6 +25,14 @@ type BleveRepositoryInterface interface {
 	IndexExistingApplicants(applicants []models.Applicant) error
 	UpdateApplicant(applicant models.Applicant) error
 	DeleteApplicant(applicantID string) error
+
+	// ==== VAT Rate Indexing ====
+	IndexSingleVATRate(vatRate models.VATRate) error
+	IndexExistingVATRates(vatRates []models.VATRate) error
+	UpdateVATRate(vatRate models.VATRate) error
+	DeleteVATRate(vatRateID string) error
+
+	
 }
 
 // Constructor returning both the struct and the interface

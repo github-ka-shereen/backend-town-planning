@@ -77,7 +77,9 @@ type VATRate struct {
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	CreatedBy string         `gorm:"not null" json:"created_by"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	UpdatedBy *string        `json:"updated_by"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
