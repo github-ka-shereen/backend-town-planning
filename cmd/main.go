@@ -14,13 +14,15 @@ import (
 
 	// Repositories
 
-	users_repositories "town-planning-backend/users/repositories"
 	applicants_repositories "town-planning-backend/applicants/repositories"
+	stands_repositories "town-planning-backend/stands/repositories"
+	users_repositories "town-planning-backend/users/repositories"
 
 	// Routes
 
-	user_routes "town-planning-backend/users/routes"
 	applicant_routes "town-planning-backend/applicants/routes"
+	stand_routes "town-planning-backend/stands/routes"
+	user_routes "town-planning-backend/users/routes"
 
 	// bleve
 	bleveControllers "town-planning-backend/bleve/controllers"
@@ -137,6 +139,7 @@ func main() {
 
 	// Repositories
 	bleveIndexingService := bleveServices.NewIndexingService(config.Logger, indexPath)
+	standRepo := stands_repositories.NewStandRepository(db)
 	userRepo := users_repositories.NewUserRepository(db)
 	applicantRepo := applicants_repositories.NewApplicantRepository(db)
 	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
@@ -144,6 +147,7 @@ func main() {
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
+	stand_routes.StandRouterInit(app, db, standRepo)
 
 	// Bleve Routes
 	bleveController := bleveControllers.NewSearchController(bleveServiceRepo)

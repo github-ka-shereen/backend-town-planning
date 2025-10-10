@@ -23,10 +23,10 @@ type StandType struct {
 
 // Project represents a development project that may contain multiple stands
 type Project struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	Name        string    `gorm:"not null;index" json:"name"`
-	Description *string   `gorm:"type:text" json:"description"`
-	ProjectCode string    `gorm:"unique;not null;index" json:"project_code"`
+	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ProjectName   string    `gorm:"not null;index" json:"project_name"`
+	Description   *string   `gorm:"type:text" json:"description"`
+	ProjectNumber string    `gorm:"unique;not null;index" json:"project_number"`
 
 	// Project Address and Location
 	Address string `gorm:"not null" json:"address"`

@@ -80,11 +80,11 @@ func ConfigureDatabase() *gorm.DB {
 	}
 
 	// ===== ADD YOUR CLEANUP CODE HERE =====
-	// // Define a skip list for tables that should NOT be dropped
+	// Define a skip list for tables that should NOT be dropped
 	// skipTables := map[string]bool{
-	// 	"users":      true, // Example: keep users table
-	// 	"clients":    true, // Example: keep clients table
-	// 	"email_logs": true, // Example: keep email_logs table
+	// 	// "users":      true, // Example: keep users table
+	// 	// "clients":    true, // Example: keep clients table
+	// 	// "email_logs": true, // Example: keep email_logs table
 	// 	// Add other tables to preserve here
 	// }
 
@@ -112,7 +112,8 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"departments",
+	// 	"projects",
+	// 	"stand-types",
 	// }
 
 	// for _, table := range specificTablesToDrop {

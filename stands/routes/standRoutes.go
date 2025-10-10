@@ -18,6 +18,7 @@ func StandRouterInit(
 		DB:        db,
 	}
 
-	standRoutes := app.Group("/stands")
+	standRoutes := app.Group("/api/v1/stands")
 	standRoutes.Post("/stand-types", standController.AddStandTypesController)
+	standRoutes.Get("/stand-types/filtered", standController.GetFilteredStandTypesController)
 }
