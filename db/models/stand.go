@@ -12,7 +12,7 @@ import (
 type StandType struct {
 	ID          uuid.UUID      `gorm:"type:uuid;primary_key;" json:"id"`
 	Name        string         `gorm:"unique;not null" json:"name"`
-	Description string         `json:"description"`
+	Description *string        `json:"description"`
 	IsSystem    bool           `gorm:"default:false" json:"is_system"`
 	IsActive    bool           `gorm:"default:true" json:"is_active"`
 	CreatedBy   string         `gorm:"not null" json:"created_by"`
@@ -47,7 +47,7 @@ type Project struct {
 	// Relationships - FIXED: Now Document has ProjectID field
 	Developer *Applicant `gorm:"foreignKey:DeveloperID" json:"developer,omitempty"`
 	Stands    []Stand    `gorm:"foreignKey:ProjectID" json:"stands,omitempty"`
-	Documents []Document `gorm:"foreignKey:ProjectID" json:"documents,omitempty"` // This should now work
+	Documents []Document `gorm:"foreignKey:ProjectID" json:"documents,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -59,18 +59,19 @@ type Project struct {
 
 // Stand represents a plot of land or property unit
 type Stand struct {
-	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	StandNumber string    `gorm:"unique;not null;index" json:"stand_number"`
+	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	StandNumber   string    `gorm:"unique;not null;index" json:"stand_number"`
+	AccountNumber *string   `json:"account_number"`
 
 	// Project Reference (Optional)
 	ProjectID *uuid.UUID `gorm:"type:uuid;index" json:"project_id"`
 
 	// Location Information (Used when Project is not available)
-	Address       *string `gorm:"index" json:"address"` // Optional if project has address
-	StreetName    *string `gorm:"index" json:"street_name"`
-	Suburb        *string `gorm:"index" json:"suburb"`
-	TownCity      *string `gorm:"index" json:"town_city"`
-	ProvinceState *string `gorm:"index" json:"province_state"`
+	Address       *string `json:"address"` // Optional if project has address
+	StreetName    *string `json:"street_name"`
+	Suburb        *string `json:"suburb"`
+	TownCity      *string `json:"town_city"`
+	ProvinceState *string `json:"province_state"`
 	PostalCode    *string `json:"postal_code"`
 	Country       string  `gorm:"default:'Zimbabwe'" json:"country"`
 

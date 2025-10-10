@@ -9,14 +9,22 @@ import (
 
 // SeedStandTypes populates the database with system stand types
 func SeedStandTypes(db *gorm.DB, createdBy string) error {
+	descResidential := "Residential stands"
+	descCommercial := "Commercial stands"
+	descIndustrial := "Industrial stands"
+	descAgricultural := "Agricultural stands"
+	descRecreational := "Recreational stands"
+	descInstitutional := "Institutional stands"
+	descMixedUse := "Mixed-use stands"
+
 	standTypes := []models.StandType{
-		{Name: "RESIDENTIAL", Description: "Residential stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "COMMERCIAL", Description: "Commercial stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "INDUSTRIAL", Description: "Industrial stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "AGRICULTURAL", Description: "Agricultural stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "RECREATIONAL", Description: "Recreational stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "INSTITUTIONAL", Description: "Institutional stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
-		{Name: "MIXED_USE", Description: "Mixed-use stands", IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "RESIDENTIAL", Description: &descResidential, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "COMMERCIAL", Description: &descCommercial, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "INDUSTRIAL", Description: &descIndustrial, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "AGRICULTURAL", Description: &descAgricultural, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "RECREATIONAL", Description: &descRecreational, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "INSTITUTIONAL", Description: &descInstitutional, IsSystem: true, IsActive: true, CreatedBy: createdBy},
+		{Name: "MIXED_USE", Description: &descMixedUse, IsSystem: true, IsActive: true, CreatedBy: createdBy},
 	}
 
 	for _, st := range standTypes {
