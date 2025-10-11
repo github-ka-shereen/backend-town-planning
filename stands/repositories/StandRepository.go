@@ -1,15 +1,20 @@
 package repositories
 
 import (
+	"errors"
+	"fmt"
 	"strings"
 	"town-planning-backend/db/models"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type StandRepository interface {
 	AddStandTypes(tx *gorm.DB, standType *models.StandType) (*models.StandType, error)
 	GetFilteredStandTypes(pageSize int, offset int, filters map[string]string) ([]models.StandType, int64, error)
+	GetProjectByProjectNumber(projectNumber string) (*models.Project, error)
+	CreateProject(project *models.Project) (*models.Project, error)
 }
 
 type standRepository struct {
@@ -20,6 +25,25 @@ func NewStandRepository(db *gorm.DB) StandRepository {
 	return &standRepository{
 		db: db,
 	}
+}
+
+func (r *standRepository) CreateProject(project *models.Project) (*models.Project, error) {
+	project.ID = uuid.New()
+	err := r.db.Create(project).Error
+	return project, err
+}
+
+func (r *standRepository) GetProjectByProjectNumber(projectNumber string) (*models.Project, error) {
+	var project models.Project
+	err := r.db.First(&project, "project_number = ?", projectNumber).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// Return nil with a descriptive error instead of just nil, nil
+			return nil, fmt.Errorf("project with project number '%s' not found", projectNumber)
+		}
+		return nil, err // Other database errors
+	}
+	return &project, nil // Project found
 }
 
 // AddStandTypes creates a new stand type in the database

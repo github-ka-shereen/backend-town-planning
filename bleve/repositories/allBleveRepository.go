@@ -32,7 +32,11 @@ type BleveRepositoryInterface interface {
 	UpdateVATRate(vatRate models.VATRate) error
 	DeleteVATRate(vatRateID string) error
 
-	
+	// ==== Project Indexing ====
+	IndexSingleProject(project models.Project) error
+	IndexExistingProjects(projects []models.Project) error
+	UpdateProject(project models.Project) error
+	DeleteProject(projectID string) error
 }
 
 // Constructor returning both the struct and the interface

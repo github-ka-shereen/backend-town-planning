@@ -30,6 +30,7 @@ type Project struct {
 
 	// Project Address and Location
 	Address string `gorm:"not null" json:"address"`
+	City    string `gorm:"not null" json:"city"`
 	Country string `gorm:"default:'Zimbabwe'" json:"country"`
 
 	// Geographic Information
