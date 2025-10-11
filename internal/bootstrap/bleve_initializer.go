@@ -6,6 +6,7 @@ import (
 	applicants_repositories "town-planning-backend/applicants/repositories"
 	bleveRepositories "town-planning-backend/bleve/repositories"
 	"town-planning-backend/config"
+	stands_repositories "town-planning-backend/stands/repositories"
 	users_repositories "town-planning-backend/users/repositories"
 
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ func IndexBleveData(
 	ctx context.Context,
 	userRepo users_repositories.UserRepository,
 	applicantRepo applicants_repositories.ApplicantRepository,
+	standRepo stands_repositories.StandRepository,
 	bleveRepo bleveRepositories.BleveRepositoryInterface,
 ) {
 
@@ -36,5 +38,12 @@ func IndexBleveData(
 		config.Logger.Error("Error fetching applicants for Bleve indexing", zap.Error(err))
 	} else if err := bleveRepo.IndexExistingApplicants(applicants); err != nil {
 		config.Logger.Error("Failed to index applicants into Bleve", zap.Error(err))
+	}
+
+	// Index Projects
+	if projects, err := standRepo.GetAllProjects(); err != nil {
+		config.Logger.Error("Error fetching projects for Bleve indexing", zap.Error(err))
+	} else if err := bleveRepo.IndexExistingProjects(projects); err != nil {
+		config.Logger.Error("Failed to index projects into Bleve", zap.Error(err))
 	}
 }

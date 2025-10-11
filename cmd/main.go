@@ -162,7 +162,7 @@ func main() {
 	go utils.RunScheduledCleanup(redisClient)
 
 	// // Re-Index all data
-	// bootstrap.IndexBleveData(ctx, userRepo, applicantRepo, bleveInterfaceRepo)
+	// bootstrap.IndexBleveData(ctx, userRepo, applicantRepo, standRepo, bleveInterfaceRepo)
 
 	// Run seeders for initial data
 	// config.RunAllSeeders(db)

@@ -15,6 +15,12 @@ type StandRepository interface {
 	GetFilteredStandTypes(pageSize int, offset int, filters map[string]string) ([]models.StandType, int64, error)
 	GetProjectByProjectNumber(projectNumber string) (*models.Project, error)
 	CreateProject(project *models.Project) (*models.Project, error)
+	GetAllProjects() ([]models.Project, error)
+	LogBulkUploadErrors(errors []models.BulkUploadErrorProjects) error
+	LogDuplicateProjects(errors []models.BulkUploadErrorProjects) error
+	LogEmailSent(emailLog *models.EmailLog) error
+	FindDuplicateProjectNumbers(projectNumbers []string) ([]string, error)
+	BulkCreateProjects(tx *gorm.DB, projects []models.Project) error
 }
 
 type standRepository struct {
@@ -25,6 +31,65 @@ func NewStandRepository(db *gorm.DB) StandRepository {
 	return &standRepository{
 		db: db,
 	}
+}
+
+func (r *standRepository) FindDuplicateProjectNumbers(projectNumbers []string) ([]string, error) {
+	var duplicates []string
+	err := r.db.Model(&models.Project{}).
+		Where("project_number IN ?", projectNumbers).
+		Pluck("project_number", &duplicates).Error
+	return duplicates, err
+}
+
+func (r *standRepository) LogEmailSent(emailLog *models.EmailLog) error {
+	return r.db.Create(emailLog).Error
+}
+
+// BulkCreateProjects inserts multiple projects in one go
+func (r *standRepository) BulkCreateProjects(tx *gorm.DB, projects []models.Project) error {
+	if len(projects) == 0 {
+		return nil
+	}
+
+	// Adding UUID for each project before batch insertion
+	for i := range projects {
+		projects[i].ID = uuid.New()
+	}
+
+	return tx.CreateInBatches(projects, 100).Error // Batch size of 100 (adjust as necessary)
+}
+
+// In the projectRepository struct implementation
+func (r *standRepository) LogBulkUploadErrors(errors []models.BulkUploadErrorProjects) error {
+	if len(errors) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(errors, 500).Error // Batch insertion of errors
+}
+
+func (r *standRepository) LogDuplicateProjects(errors []models.BulkUploadErrorProjects) error {
+	if len(errors) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(errors, 500).Error // Batch insertion of errors
+}
+
+func (r *standRepository) GetAllDuplicates() ([]models.BulkUploadErrorProjects, error) {
+	var duplicates []models.BulkUploadErrorProjects
+	err := r.db.Find(&duplicates).Error
+	return duplicates, err
+}
+
+func (r *standRepository) MarkDuplicateAsResolved(id string) error {
+	return r.db.Model(&models.BulkUploadErrorProjects{}).
+		Where("id = ?", id).
+		Update("resolved", true).Error
+}
+
+func (r *standRepository) GetAllProjects() ([]models.Project, error) {
+	var projects []models.Project
+	err := r.db.Find(&projects).Error
+	return projects, err
 }
 
 func (r *standRepository) CreateProject(project *models.Project) (*models.Project, error) {
