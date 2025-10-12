@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 	"town-planning-backend/db/models"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ type StandRepository interface {
 	LogEmailSent(emailLog *models.EmailLog) error
 	FindDuplicateProjectNumbers(projectNumbers []string) ([]string, error)
 	BulkCreateProjects(tx *gorm.DB, projects []models.Project) error
+	GetFilteredProjects(projectName, city, startDate, endDate string, pageSize, page int) ([]models.Project, int64, error)
 }
 
 type standRepository struct {
@@ -163,4 +165,45 @@ func (r *standRepository) GetFilteredStandTypes(pageSize int, offset int, filter
 	}
 
 	return standTypes, total, nil
+}
+
+func (r *standRepository) GetFilteredProjects(projectName, city, startDate, endDate string, pageSize, page int) ([]models.Project, int64, error) {
+	var projects []models.Project
+	var totalResults int64
+
+	query := r.db.Model(&models.Project{})
+
+	// Apply projectName filter if provided
+	if projectName != "" {
+		query = query.Where("project_name LIKE ?", "%"+projectName+"%")
+	}
+
+	// Apply city filter if provided
+	if city != "" {
+		query = query.Where("city LIKE ?", "%"+city+"%")
+	}
+
+	// Apply date range filter if both dates are provided
+	if startDate != "" && endDate != "" {
+		// Parse the end date and add one day to include the entire end date
+		endDateParsed, err := time.Parse("2006-01-02", endDate)
+		if err == nil {
+			endDatePlusOne := endDateParsed.Add(24 * time.Hour)
+			query = query.Where("created_at >= ? AND created_at <= ?", startDate, endDatePlusOne.Format("2006-01-02"))
+		}
+	}
+
+	// Get total count before pagination
+	if err := query.Count(&totalResults).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Apply pagination
+	offset := (page - 1) * pageSize
+	err := query.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&projects).Error
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return projects, totalResults, nil
 }

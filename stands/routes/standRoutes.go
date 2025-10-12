@@ -23,5 +23,8 @@ func StandRouterInit(
 
 	standRoutes := app.Group("/api/v1/stands")
 	standRoutes.Post("/stand-types", standController.AddStandTypesController)
+	standRoutes.Post("/bulk-upload-projects", standController.BulkUploadProjects)
+	standRoutes.Post("/create-project", standController.CreateProject)
 	standRoutes.Get("/stand-types/filtered", standController.GetFilteredStandTypesController)
+	standRoutes.Get("/projects/filtered", standController.GetFilteredProjectsController)
 }
