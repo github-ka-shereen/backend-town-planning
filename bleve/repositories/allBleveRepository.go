@@ -37,6 +37,12 @@ type BleveRepositoryInterface interface {
 	IndexExistingProjects(projects []models.Project) error
 	UpdateProject(project models.Project) error
 	DeleteProject(projectID string) error
+
+	// ==== Stand Indexing ====
+	IndexSingleStand(stand models.Stand) error
+	IndexExistingStands(stands []models.Stand) error
+	UpdateStand(stand models.Stand) error
+	DeleteStand(standID string) error
 }
 
 // Constructor returning both the struct and the interface

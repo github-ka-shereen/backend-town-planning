@@ -34,8 +34,11 @@ var allModels = []interface{}{
 	&models.Project{}, // This must come before Document
 	&models.Stand{},
 	&models.Applicant{}, // This must come before Document
+	&models.AllStandOwners{},
 	&models.EmailLog{},
 	&models.BulkUploadErrorProjects{},
+	&models.BulkUploadErrorStands{},
+	&models.BulkStandUploadError{},
 
 	// Document models (after all referenced tables)
 	&models.Document{}, // Now has ProjectID field

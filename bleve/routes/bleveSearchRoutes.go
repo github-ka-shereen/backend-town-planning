@@ -12,4 +12,5 @@ func InitBleveRoutes(app *fiber.App, controller *controllers.SearchController, d
 
 	api.Get("/users", controller.SearchUsersController)
 	api.Get("/vat-rates", controller.SearchVATRatesController)
+	api.Get("/stands", controller.SearchStandsController)
 }

@@ -18,11 +18,20 @@ type StandRepository interface {
 	CreateProject(project *models.Project) (*models.Project, error)
 	GetAllProjects() ([]models.Project, error)
 	LogBulkUploadErrors(errors []models.BulkUploadErrorProjects) error
+	LogBulkUploadStandsErrors(errors []models.BulkUploadErrorStands) error
 	LogDuplicateProjects(errors []models.BulkUploadErrorProjects) error
 	LogEmailSent(emailLog *models.EmailLog) error
 	FindDuplicateProjectNumbers(projectNumbers []string) ([]string, error)
 	BulkCreateProjects(tx *gorm.DB, projects []models.Project) error
 	GetFilteredProjects(projectName, city, startDate, endDate string, pageSize, page int) ([]models.Project, int64, error)
+	GetActiveVATRate() (*models.VATRate, error)
+	GetStandTypeByName(name string) (*models.StandType, error) // Add this method
+	FindDuplicateStandNumbers(standNumbers []string) ([]string, error)
+	BulkCreateStands(tx *gorm.DB, stands []models.Stand) error
+	GetFilteredStands(filters map[string]string, paginationEnabled bool, limit, offset int) ([]models.Stand, int64, error)
+	GetFilteredAllStandsResults(filters map[string]string, userEmail string) ([]models.Stand, int64, bool, error)
+	GetFilteredReservedStands(filters map[string]string, paginationEnabled bool, limit, offset int) ([]models.Reservation, int64, error)
+	GetFilteredAllFilteredReservedStandsResults(filters map[string]string, userEmail string) ([]models.Reservation, int64, bool, error)
 }
 
 type standRepository struct {
@@ -33,6 +42,62 @@ func NewStandRepository(db *gorm.DB) StandRepository {
 	return &standRepository{
 		db: db,
 	}
+}
+
+// BulkCreateStands inserts multiple stands in batches
+func (r *standRepository) BulkCreateStands(tx *gorm.DB, stands []models.Stand) error {
+	if len(stands) == 0 {
+		return nil
+	}
+
+	// Assign UUIDs for each stand before batch insertion
+	for i := range stands {
+		stands[i].ID = uuid.New()
+	}
+
+	// Insert stands in batches using the provided transaction (tx)
+	// This ensures that these insertions are part of the larger transaction
+	// managed by the controller.
+	return tx.CreateInBatches(stands, 100).Error // Batch size can be adjusted
+}
+
+// LogBulkUploadStandsErrors logs any errors encountered during bulk uploads (e.g., missing data or duplicates)
+func (r *standRepository) LogBulkUploadStandsErrors(errors []models.BulkUploadErrorStands) error {
+	if len(errors) == 0 {
+		return nil
+	}
+	return r.db.CreateInBatches(errors, 500).Error
+}
+
+// FindDuplicateStandNumbers checks if any of the provided stand numbers already exist in the database
+func (r *standRepository) FindDuplicateStandNumbers(standNumbers []string) ([]string, error) {
+	var duplicates []string
+	err := r.db.Model(&models.Stand{}).
+		Where("stand_number IN ?", standNumbers).
+		Pluck("stand_number", &duplicates).Error
+	return duplicates, err
+}
+
+func (r *standRepository) GetStandTypeByName(name string) (*models.StandType, error) {
+	var standType models.StandType
+	
+	// Trim and convert both to uppercase for consistent comparison
+	cleanName := strings.ToUpper(strings.TrimSpace(name))
+	
+	err := r.db.Where("UPPER(TRIM(name)) = ? AND is_active = ?", cleanName, true).First(&standType).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, fmt.Errorf("stand type '%s' not found or inactive", strings.TrimSpace(name))
+		}
+		return nil, err
+	}
+	return &standType, nil
+}
+
+func (r *standRepository) GetActiveVATRate() (*models.VATRate, error) {
+	var vatRate models.VATRate
+	err := r.db.First(&vatRate, "is_active = ?", true).Error
+	return &vatRate, err
 }
 
 func (r *standRepository) FindDuplicateProjectNumbers(projectNumbers []string) ([]string, error) {

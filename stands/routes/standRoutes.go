@@ -1,9 +1,9 @@
 package routes
 
 import (
+	indexing_repository "town-planning-backend/bleve/repositories"
 	"town-planning-backend/stands/controllers"
 	"town-planning-backend/stands/repositories"
-	indexing_repository "town-planning-backend/bleve/repositories"	
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -13,7 +13,7 @@ func StandRouterInit(
 	app *fiber.App,
 	db *gorm.DB,
 	standRepository repositories.StandRepository,
-    bleveRepository indexing_repository.BleveRepositoryInterface, 
+	bleveRepository indexing_repository.BleveRepositoryInterface,
 ) {
 	standController := &controllers.StandController{
 		StandRepo: standRepository,
@@ -24,7 +24,9 @@ func StandRouterInit(
 	standRoutes := app.Group("/api/v1/stands")
 	standRoutes.Post("/stand-types", standController.AddStandTypesController)
 	standRoutes.Post("/bulk-upload-projects", standController.BulkUploadProjects)
+	standRoutes.Post("/bulk-upload-stands", standController.BulkUploadStands)
 	standRoutes.Post("/create-project", standController.CreateProject)
 	standRoutes.Get("/stand-types/filtered", standController.GetFilteredStandTypesController)
 	standRoutes.Get("/projects/filtered", standController.GetFilteredProjectsController)
+	standRoutes.Get("/filtered", standController.GetFilteredStandsController)
 }

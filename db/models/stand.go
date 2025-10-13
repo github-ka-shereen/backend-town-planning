@@ -8,6 +8,26 @@ import (
 	"gorm.io/gorm"
 )
 
+type StandCurrency string
+
+const (
+	USDStandCurrency StandCurrency = "USD"
+	ZWLStandCurrency StandCurrency = "ZWL"
+)
+
+type Status string
+
+const (
+	UnallocatedStatus          Status = "unallocated"
+	SwappedStatus              Status = "swapped"
+	DonatedStatus              Status = "donated"
+	ReservedStatus             Status = "reserved"
+	ReservedWithoutOwnerStatus Status = "reserved_without_owner"
+	FullyPaidStatus            Status = "fully_paid"
+	PrePlanActivationStatus    Status = "pre_plan_activation"
+	OngoingPaymentStatus       Status = "ongoing_payment"
+)
+
 // StandType represents the type of stand (e.g., Residential, Commercial, Industrial, etc.)
 type StandType struct {
 	ID          uuid.UUID      `gorm:"type:uuid;primary_key;" json:"id"`
@@ -110,21 +130,50 @@ type Stand struct {
 	IsApproved    bool `gorm:"default:false" json:"is_approved"`
 	IsActive      bool `gorm:"default:true" json:"is_active"`
 
+	// This is the cost of the stand *before* VAT
+	TaxExclusiveStandPrice decimal.Decimal `gorm:"type:decimal(18,8)" json:"tax_exclusive_stand_price"`
+
+	// This is the total cost of the stand *including* VAT
+	StandCost       decimal.Decimal `gorm:"type:decimal(18,8)" json:"stand_cost"`              // This field now includes VAT
+	VATAmount       decimal.Decimal `gorm:"type:decimal(18,8);default:0.00" json:"vat_amount"` // The 15% VAT charged on the TaxExclusiveStandPrice
+	TitleDeedNumber *string         `json:"title_deed_number"`
+	Status          Status          `json:"status"`
+
 	// Relationships
-	Project       *Project      `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
-	StandType     *StandType    `gorm:"foreignKey:StandTypeID" json:"stand_type,omitempty"`
-	StandSize     *string       `json:"stand_size"`
-	PropertyType  *PropertyType `gorm:"foreignKey:PropertyTypeID" json:"property_type,omitempty"`
-	CurrentOwner  *Applicant    `gorm:"foreignKey:CurrentOwnerID" json:"current_owner,omitempty"`
-	PreviousOwner *Applicant    `gorm:"foreignKey:PreviousOwnerID" json:"previous_owner,omitempty"`
-	Applications  []Application `gorm:"foreignKey:StandID" json:"applications,omitempty"`
-	Documents     []Document    `gorm:"foreignKey:StandID" json:"documents,omitempty"` // Survey Diagram, General Plan, etc.
+	Project        *Project          `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
+	StandType      *StandType        `gorm:"foreignKey:StandTypeID" json:"stand_type,omitempty"`
+	StandSize      decimal.Decimal   `gorm:"type:decimal(18,8)" json:"stand_size"`
+	StandCurrency  StandCurrency     `json:"stand_currency"`
+	PropertyType   *PropertyType     `gorm:"foreignKey:PropertyTypeID" json:"property_type,omitempty"`
+	CurrentOwner   *Applicant        `gorm:"foreignKey:CurrentOwnerID" json:"current_owner,omitempty"`
+	PreviousOwner  *Applicant        `gorm:"foreignKey:PreviousOwnerID" json:"previous_owner,omitempty"`
+	AllStandOwners *[]AllStandOwners `gorm:"foreignKey:StandID;references:ID" json:"all_stand_owners"`
+	Applications   []Application     `gorm:"foreignKey:StandID" json:"applications,omitempty"`
+	Documents      []Document        `gorm:"foreignKey:StandID" json:"documents,omitempty"` // Survey Diagram, General Plan, etc.
 
 	// Audit fields
-	CreatedBy string         `gorm:"not null" json:"created_by"`
-	UpdatedBy *string        `json:"updated_by"`
-	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	CreatedBy  string         `gorm:"not null" json:"created_by"`
+	UpdatedBy  *string        `json:"updated_by"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	ReservedAt *time.Time     `gorm:"column:reserved_at" json:"reserved_at"`
+	DonatedAt  *time.Time     `gorm:"column:donated_at" json:"donated_at"`
+	SoldAt     *time.Time     `json:"sold_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+type AllStandOwners struct {
+	ID            uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
+	StandID       uuid.UUID  `json:"stand_id"`
+	PaymentPlanID *uuid.UUID `gorm:"type:uuid;null;index" json:"payment_plan_id"`
+	ApplicantID   uuid.UUID  `gorm:"index:idx_applicant_id_is_liaison" json:"applicant_id"`
+	IsLiaison     bool       `gorm:"index" json:"is_liaison"`
+	CreatedBy     string     `json:"created_by"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt     time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+
+	// Add this field to create the relationship with Client
+	Applicant *Applicant     `gorm:"foreignKey:ApplicantID;references:ID" json:"applicant"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
