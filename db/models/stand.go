@@ -87,15 +87,6 @@ type Stand struct {
 	// Project Reference (Optional)
 	ProjectID *uuid.UUID `gorm:"type:uuid;index" json:"project_id"`
 
-	// Location Information (Used when Project is not available)
-	Address       *string `json:"address"` // Optional if project has address
-	StreetName    *string `json:"street_name"`
-	Suburb        *string `json:"suburb"`
-	TownCity      *string `json:"town_city"`
-	ProvinceState *string `json:"province_state"`
-	PostalCode    *string `json:"postal_code"`
-	Country       string  `gorm:"default:'Zimbabwe'" json:"country"`
-
 	// Geographic Information
 	Latitude        *decimal.Decimal `gorm:"type:decimal(10,8)" json:"latitude"`
 	Longitude       *decimal.Decimal `gorm:"type:decimal(11,8)" json:"longitude"`
@@ -104,15 +95,13 @@ type Stand struct {
 
 	// Stand Classification
 	StandTypeID    *uuid.UUID `gorm:"type:uuid;index" json:"stand_type_id"`
-	StandSizeID    *uuid.UUID `gorm:"type:uuid;index" json:"stand_size_id"`
 	PropertyTypeID *uuid.UUID `gorm:"type:uuid;index" json:"property_type_id"`
-	ZoneCategory   *string    `gorm:"type:varchar(50);index" json:"zone_category"`
+
 
 	// Ownership Information
 	CurrentOwnerID   *uuid.UUID `gorm:"type:uuid;index" json:"current_owner_id"`
 	PreviousOwnerID  *uuid.UUID `gorm:"type:uuid;index" json:"previous_owner_id"`
 	OwnershipType    *string    `gorm:"type:varchar(30);index" json:"ownership_type"`
-	RegistrationDate *time.Time `json:"registration_date"`
 
 	// Survey and Deeds Information
 	DeedsNumber    *string    `gorm:"index" json:"deeds_number"`
@@ -144,7 +133,6 @@ type Stand struct {
 	StandType      *StandType        `gorm:"foreignKey:StandTypeID" json:"stand_type,omitempty"`
 	StandSize      decimal.Decimal   `gorm:"type:decimal(18,8)" json:"stand_size"`
 	StandCurrency  StandCurrency     `json:"stand_currency"`
-	PropertyType   *PropertyType     `gorm:"foreignKey:PropertyTypeID" json:"property_type,omitempty"`
 	CurrentOwner   *Applicant        `gorm:"foreignKey:CurrentOwnerID" json:"current_owner,omitempty"`
 	PreviousOwner  *Applicant        `gorm:"foreignKey:PreviousOwnerID" json:"previous_owner,omitempty"`
 	AllStandOwners *[]AllStandOwners `gorm:"foreignKey:StandID;references:ID" json:"all_stand_owners"`

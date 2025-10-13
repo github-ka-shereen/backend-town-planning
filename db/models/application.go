@@ -30,11 +30,20 @@ const (
 	CancelledPayment PaymentStatus = "CANCELLED"
 )
 
+type PermitStatus string
+
+const (
+	PermitActive    PermitStatus = "ACTIVE"
+	PermitExpired   PermitStatus = "EXPIRED"
+	PermitRevoked   PermitStatus = "REVOKED"
+	PermitSuspended PermitStatus = "SUSPENDED"
+)
+
 // PropertyType model for dynamic property types
-type PropertyType struct {
+type DevelopmentCategory struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	Name        string    `gorm:"unique;not null" json:"name"`
-	Description string    `json:"description"`
+	Name        string    `gorm:"unique;not null" json:"name"` // e.g., "COMMERCIAL & INDUSTRIAL", "MEDIUM & LOW DENSITY", "CHURCH STRUCTURES" same as stand type
+	Description *string   `json:"description"`
 	IsSystem    bool      `gorm:"default:false" json:"is_system"` // System types cannot be modified
 	IsActive    bool      `gorm:"default:true" json:"is_active"`
 
@@ -45,20 +54,45 @@ type PropertyType struct {
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 }
 
-// Tariff model for dynamic pricing with validity period
-type Tariff struct {
-	ID              uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
-	PropertyTypeID  uuid.UUID       `gorm:"type:uuid;not null;index" json:"property_type_id"`
-	PricePerSqM     decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"price_per_sq_m"`
-	PermitFee       decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"permit_fee"`
-	InspectionFee   decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"inspection_fee"`
-	DevelopmentLevy decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy"` // Store as percentage (e.g., 15.00 for 15%)
-	ValidFrom       time.Time       `gorm:"not null;index" json:"valid_from"`
-	ValidTo         *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
-	IsActive        bool            `gorm:"default:true" json:"is_active"`
+// Permit model for issued permits
+type Permit struct {
+	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	PermitNumber  string    `gorm:"unique;not null;index" json:"permit_number"` // e.g., "VFCC/PERMIT/2024/001"
+	ApplicationID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
+
+	// Permit details
+	IssueDate  time.Time    `gorm:"not null" json:"issue_date"`
+	ValidUntil *time.Time   `json:"valid_until"` // Typically issueDate + 24 months
+	Status     PermitStatus `gorm:"type:varchar(20);default:'ACTIVE'" json:"status"`
+
+	// Development category this permit was issued for
+	DevelopmentCategoryID uuid.UUID `gorm:"type:uuid;not null;index" json:"development_category_id"`
 
 	// Relationships
-	PropertyType PropertyType `gorm:"foreignKey:PropertyTypeID" json:"property_type"`
+	Application         Application         `gorm:"foreignKey:ApplicationID" json:"application"`
+	DevelopmentCategory DevelopmentCategory `gorm:"foreignKey:DevelopmentCategoryID" json:"development_category"`
+
+	// Audit fields
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedBy string         `gorm:"not null" json:"created_by"`
+}
+
+// Tariff - defines the FEES for a development category during a specific period
+type Tariff struct {
+	ID                    uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
+	DevelopmentCategoryID uuid.UUID       `gorm:"type:uuid;not null;index" json:"development_category_id"`
+	PricePerSqM           decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"price_per_sq_m"`
+	PermitFee             decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"permit_fee"`
+	InspectionFee         decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"inspection_fee"`
+	DevelopmentLevy       decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy"` // Store as percentage (e.g., 15.00 for 15%)
+	ValidFrom             time.Time       `gorm:"not null;index" json:"valid_from"`
+	ValidTo               *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
+	IsActive              bool            `gorm:"default:true" json:"is_active"`
+
+	// Relationships
+	DevelopmentCategory DevelopmentCategory `gorm:"foreignKey:DevelopmentCategoryID" json:"development_category"`
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -126,13 +160,15 @@ type Application struct {
 	TariffID  *uuid.UUID `gorm:"type:uuid;index" json:"tariff_id"`
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
+	PermitID *uuid.UUID `gorm:"type:uuid;index" json:"permit_id"`
+	Permit   *Permit    `gorm:"foreignKey:PermitID" json:"permit,omitempty"`
+
 	// Relationships
-	Applicant    Applicant     `gorm:"foreignKey:ApplicantID" json:"applicant"`
-	PropertyType *PropertyType `gorm:"foreignKey:PropertyTypeID" json:"property_type"`
-	Tariff       *Tariff       `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
-	VATRate      *VATRate      `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
-	Documents    []Document    `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
-	Comments     []Comment     `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
+	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
+	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
+	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
+	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
+	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -186,10 +222,18 @@ func (c *Comment) BeforeCreate(tx *gorm.DB) (err error) {
 	return
 }
 
-// PropertyType
-func (pt *PropertyType) BeforeCreate(tx *gorm.DB) (err error) {
+// DevelopmentCategory
+func (pt *DevelopmentCategory) BeforeCreate(tx *gorm.DB) (err error) {
 	if pt.ID == uuid.Nil {
 		pt.ID = uuid.New()
+	}
+	return
+}
+
+// Permit
+func (p *Permit) BeforeCreate(tx *gorm.DB) (err error) {
+	if p.ID == uuid.Nil {
+		p.ID = uuid.New()
 	}
 	return
 }

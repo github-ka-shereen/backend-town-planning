@@ -15,9 +15,8 @@ import (
 )
 
 // allModels defines all models that should be migrated and have permissions generated
-// This is the only place you need to add new models
 var allModels = []interface{}{
-	// Core Authentication and Authorization Models
+	// 1. Core Authentication and Authorization Models
 	&models.Permission{},
 	&models.Role{},
 	&models.RolePermission{},
@@ -25,39 +24,44 @@ var allModels = []interface{}{
 	&models.User{},
 	&models.UserAuditLog{},
 
-	// Document Management Models (standalone first)
+	// 2. Document Management Models (standalone categories first)
 	&models.DocumentCategory{},
 
-	// Property and Stand Management Models (before Document since Document references them)
-	&models.PropertyType{},
+	// 3. Property and Stand Management Models 
+	&models.DevelopmentCategory{},
 	&models.StandType{},
-	&models.Project{}, // This must come before Document
+	&models.Project{}, 
 	&models.Stand{},
-	&models.Applicant{}, // This must come before Document
+
+	// 4. Applicant Models (before Application)
+	&models.Applicant{}, 
+	&models.ApplicantAdditionalPhone{},
+	&models.OrganisationRepresentative{},
+	&models.ApplicantOrganisationRepresentative{},
+
+	// 5. Financial Models
+	&models.Tariff{},
+	&models.VATRate{},
+
+	// 6. Document models (now all referenced tables exist)
+	&models.Document{}, 
+	&models.DocumentAuditLog{},
+	&models.DocumentVersion{},
+
+	// 7. Application models (references Applicant, Project, etc.)
+	&models.Application{},
+
+	// 8. Permit models (AFTER Application since it references Application)
+	&models.Permit{},
+
+	// 9. Other models that reference the above
+	&models.Comment{},
+	&models.ApplicantDocument{},
 	&models.AllStandOwners{},
 	&models.EmailLog{},
 	&models.BulkUploadErrorProjects{},
 	&models.BulkUploadErrorStands{},
 	&models.BulkStandUploadError{},
-
-	// Document models (after all referenced tables)
-	&models.Document{}, // Now has ProjectID field
-	&models.DocumentAuditLog{},
-	&models.DocumentVersion{},
-
-	// Applicant and Organisation Models
-	&models.OrganisationRepresentative{},
-	&models.ApplicantOrganisationRepresentative{},
-	&models.ApplicantAdditionalPhone{},
-
-	// Financial Models
-	&models.Tariff{},
-	&models.VATRate{},
-
-	// Application and Workflow Models (last as they reference many tables)
-	&models.Application{},
-	&models.Comment{},
-	&models.ApplicantDocument{},
 }
 
 func ConfigureDatabase() *gorm.DB {
@@ -110,15 +114,14 @@ func ConfigureDatabase() *gorm.DB {
 	// If you need to drop specific tables in a particular order (like join tables first),
 	// you can add that logic here:
 
-	// Drop join tables first to avoid foreign key constraints
+	// // Drop join tables first to avoid foreign key constraints
 	// if err := db.Migrator().DropTable("stand_swap_owners"); err != nil {
 	// 	log.Printf("Failed to drop stand_swap_owners join table: %v", err)
 	// }
 
 	// // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"projects",
-	// 	"stand-types",
+	// 	"stands",
 	// }
 
 	// for _, table := range specificTablesToDrop {
