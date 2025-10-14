@@ -109,8 +109,8 @@ func getDeveloperName(application models.Application) string {
 }
 
 func getStandNumber(application models.Application) string {
-	if application.StandID != nil {
-		return *application.StandID
+	if application.Stand.StandNumber != "" {
+		return application.Stand.StandNumber
 	}
 	return "N/A"
 }

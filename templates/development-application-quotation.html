@@ -5,162 +5,183 @@
     <style>
       @page {
         size: A4;
-        margin: 10mm;
-      }
-      body {
-        font-family: Arial, sans-serif;
-        margin: 0;
-        padding: 0;
-        color: #333;
-        font-size: 10pt;
-        line-height: 1.3;
+        margin: 15mm;
       }
 
-      .main-title {
-        text-align: center;
-        font-size: 18pt;
-        font-weight: bold;
-        text-decoration: underline;
-        margin-bottom: 10pt;
-        text-transform: uppercase;
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 11pt;
+        color: #000;
+        margin: 0;
+        padding: 0;
+        line-height: 1.4;
+      }
+
+      /* --- HEADER --- */
+      .date-top {
+        text-align: left;
+        font-size: 10pt;
+        margin-bottom: 8pt;
       }
 
       .header {
-        display: flex;
-        justify-content: space-between;
-        align-items: flex-start;
-        margin-bottom: 15pt;
-      }
-
-      .header .logo {
-        width: 100pt;
-        height: 100pt;
-        flex-shrink: 0;
-      }
-
-      .header .address {
-        text-align: left;
-        font-size: 9pt;
-        line-height: 1.4;
-        border: 1px solid #333 !important;
-        padding: 10px;
-      }
-
-      .header .address strong {
-        display: block;
-        font-size: 10pt;
+        text-align: center;
         margin-bottom: 2pt;
       }
 
-      .title-block {
-        text-align: center;
-        margin-bottom: 12pt;
+      .logo {
+        width: 75pt;
+        height: 75pt;
+        margin: 0 auto 4pt auto;
       }
 
-      .title-block h2 {
-        font-size: 12pt;
+      .logo img {
+        width: 75pt;
+        height: 75pt;
+      }
+
+      .municipality-name {
         font-weight: bold;
-        margin: 0;
         text-transform: uppercase;
+        font-size: 13pt;
       }
 
-      .applicant-details {
-        margin-bottom: 15pt;
-        border: 1px solid #ccc;
-        padding: 10px;
+      .contact-block {
         font-size: 9pt;
+        line-height: 1.3;
+        text-align: center;
+        margin-top: 4pt;
       }
 
-      .applicant-details table {
-        width: 100%;
-        border-collapse: collapse;
+      .red-line {
+        height: 2px;
+        background-color: #a00000;
+        margin: 10pt 0 8pt 0;
       }
 
-      .applicant-details td {
-        padding: 4px;
-        vertical-align: top;
-      }
-
-      .applicant-details .label {
+      .department-line {
+        text-align: center;
         font-weight: bold;
-        width: 25%;
+        text-transform: uppercase;
+        font-size: 10pt;
+        letter-spacing: 0.5pt;
+        margin-top: 5pt;
       }
 
-      .fees-section {
+      /* --- SECTION TITLES --- */
+      .print-date {
+        text-align: right;
+        font-size: 10pt;
+        font-weight: bold;
+        margin: 10pt 0;
+      }
+
+      .title-box {
+        background-color: #e6e6e6;
+        text-align: center;
+        padding: 6pt 0;
         margin-bottom: 15pt;
       }
 
-      .fees-breakdown {
-        width: 100%;
-        border-collapse: collapse;
+      .title-box h2 {
+        font-weight: bold;
+        font-size: 12pt;
+        text-transform: uppercase;
+        margin: 0;
+      }
+
+      /* --- DETAILS --- */
+      .details-grid {
+        display: grid;
+        grid-template-columns: 55% 45%;
+        font-size: 10pt;
+        row-gap: 6pt;
         margin-bottom: 10pt;
-        font-size: 9pt;
       }
 
-      .fees-breakdown td {
-        border: 1px solid #ccc;
-        padding: 6px;
-        text-align: left;
+      .details-grid .label {
+        text-transform: uppercase;
+        font-weight: bold;
       }
 
-      .fees-breakdown .amount-column {
+      .details-grid .value {
         text-align: right;
       }
 
-      .fees-table {
-        width: 100%;
-        border-collapse: collapse;
-        margin-bottom: 15pt;
-        font-size: 9pt;
+      .fees-grid {
+        display: grid;
+        grid-template-columns: 55% 45%;
+        font-size: 10pt;
+        row-gap: 5pt;
+        margin-top: 8pt;
       }
 
-      .fees-table th,
-      .fees-table td {
-        border: 1px solid #ccc;
-        padding: 6px;
-        text-align: left;
-      }
-
-      .fees-table th {
-        background-color: #f5f5f5;
+      .fees-grid .label {
+        text-transform: uppercase;
         font-weight: bold;
       }
 
-      .fees-table .amount-column {
+      .fees-grid .value {
         text-align: right;
       }
 
-      .fees-table .total-row {
+      .total-row {
         font-weight: bold;
-        background-color: #e8e8e8;
+        background-color: #f0f0f0;
+        padding-top: 3pt;
+        padding-bottom: 3pt;
       }
 
-      .footer {
-        margin-top: 20pt;
-        font-size: 8pt;
+      .total-fee-box {
+        float: right;
+        border: 2px solid #000;
+        padding: 8pt;
+        width: 200pt;
+        margin-top: 15pt;
+        font-weight: bold;
+        font-size: 11pt;
       }
 
-      .footer .note {
-        font-style: italic;
-        margin-bottom: 10pt;
+      .total-fee-box .label {
+        text-transform: uppercase;
+        margin-bottom: 4pt;
+      }
+
+      .total-fee-box .amount {
+        text-align: right;
+        font-size: 13pt;
+      }
+
+      /* --- FOOTER --- */
+      .note {
+        clear: both;
+        font-size: 9pt;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-top: 30pt;
       }
 
       .signature-section {
-        margin-top: 30pt;
-        text-align: right;
+        margin-top: 40pt;
       }
 
       .signature-line {
-        border-top: 1px solid #333;
-        width: 200pt;
-        margin-left: auto;
-        margin-top: 20pt;
+        border-top: 2px solid #000;
+        width: 240pt;
+        margin-top: 25pt;
       }
 
       .signature-label {
-        font-size: 9pt;
+        font-size: 10pt;
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-top: 6pt;
+      }
+
+      .page-footer {
         text-align: center;
-        margin-top: 4pt;
+        font-size: 9pt;
+        margin-top: 40pt;
       }
 
       .no-break {
@@ -169,115 +190,95 @@
     </style>
   </head>
   <body>
-    <div class="main-title">Municipality of Redcliff</div>
-
     <div class="header">
       <div class="logo">
-        <img src="/logo" alt="Logo" style="width: 100pt; height: 100pt" />
+        <img src="/logo" alt="Logo" />
       </div>
-      <div class="address">
-        <strong>TOWN PLANNING DEPARTMENT</strong><br />
-        <strong>BUILDING INSPECTORATE SECTION</strong><br />
-        <b>P.O. Box 187</b><br />
-        <b>Redcliff Municipality Office</b><br />
-        <b>Phone:</b> (055) 212221 / 0772 345 678<br />
-        <b>Email:</b> redcliff@redcliffmunicipality.org.zw<br />
-        <b>Website:</b> www.redcliffmunicipality.co.zw
+      <div class="municipality-name">Municipality of Redcliff</div>
+
+      <div class="contact-block">
+        P.O Box 187 Redcliff <br />
+        Tel: +263-55-212221, +263-772-345-678<br />
+        E-mail: redcliff@redcliffmunicipality.org.zw<br />
+        Website: www.redcliffmunicipality.co.zw
       </div>
     </div>
 
-    <div class="title-block">
-      <h2>DEVELOPMENT PERMIT FEE QUOTATION</h2>
+    <div class="red-line"></div>
+
+    <div class="department-line">
+      Town Planning Department &nbsp;&nbsp;&nbsp;&nbsp; Building Inspectorate
+      Section
     </div>
 
-    <div class="applicant-details no-break">
-      <table>
-        <tr>
-          <td class="label">DEVELOPER NAME:</td>
-          <td>{{.DeveloperName}}</td>
-          <td class="label">STAND NUMBER:</td>
-          <td>{{.StandNumber}}</td>
-        </tr>
-        <tr>
-          <td class="label">PLAN NUMBER:</td>
-          <td>{{.PlanNumber}}</td>
-          <td class="label">PERMIT NUMBER:</td>
-          <td>{{.PermitNumber}}</td>
-        </tr>
-        <tr>
-          <td class="label">DATE RECEIVED:</td>
-          <td>{{.DateReceived}}</td>
-          <td class="label">PERMIT TYPE:</td>
-          <td>{{.PermitType}}</td>
-        </tr>
-        <tr>
-          <td class="label">DEVELOPMENT TYPE:</td>
-          <td>{{.DevelopmentType}}</td>
-          <td class="label">PRINT DATE:</td>
-          <td>{{.PrintDate}}</td>
-        </tr>
-      </table>
+    <div class="title-box">
+      <h2>Development Fees Due Breakdown</h2>
     </div>
 
-    <div class="fees-section no-break">
-      <h3 style="font-size: 11pt; margin-bottom: 8pt;">DEVELOPMENT FEES BREAKDOWN</h3>
+    <!-- Details Section -->
+    <div class="details-grid">
+      <div class="label">Date Complete Application Received:</div>
+      <div class="value">{{.DateReceived}}</div>
 
-      <table class="fees-breakdown">
-        <tr>
-          <td>PLAN STRUCTURE AREA (m²):</td>
-          <td class="amount-column">{{.PlanArea}}</td>
-        </tr>
-        <tr>
-          <td>PRICE PER SQUARE METER:</td>
-          <td class="amount-column">{{.PricePerSquareMeter}}</td>
-        </tr>
-        <tr>
-          <td>ESTIMATED COST:</td>
-          <td class="amount-column">{{.EstimatedCost}}</td>
-        </tr>
-      </table>
+      <div class="label">Plan Number:</div>
+      <div class="value">{{.PlanNumber}}</div>
 
-      <table class="fees-table">
-        <thead>
-          <tr>
-            <th>FEE TYPE</th>
-            <th>AMOUNT (USD)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>PERMIT FEE</td>
-            <td class="amount-column">{{.PermitFee}}</td>
-          </tr>
-          <tr>
-            <td>INSPECTION FEE</td>
-            <td class="amount-column">{{.InspectionFee}}</td>
-          </tr>
-          <tr>
-            <td>DEVELOPMENT FEE</td>
-            <td class="amount-column">{{.DevelopmentFee}}</td>
-          </tr>
-          <tr>
-            <td>VAT</td>
-            <td class="amount-column">{{.VATAmount}}</td>
-          </tr>
-          <tr class="total-row">
-            <td><strong>TOTAL DEVELOPMENT PERMIT FEES</strong></td>
-            <td class="amount-column"><strong>{{.TotalFees}}</strong></td>
-          </tr>
-        </tbody>
-      </table>
+      <div class="label">Permit Number:</div>
+      <div class="value">{{.PermitNumber}}</div>
+
+      <div class="label">Developer Name:</div>
+      <div class="value">{{.DeveloperName}}</div>
+
+      <div class="label">Stand Number:</div>
+      <div class="value">{{.StandNumber}}</div>
+
+      <div class="label">Permit Type:</div>
+      <div class="value">{{.PermitType}}</div>
+
+      <div class="label">Development Type:</div>
+      <div class="value">{{.DevelopmentType}}</div>
     </div>
 
-    <div class="footer no-break">
-      <div class="note">
-        N.B: DEVELOPMENT PERMIT FEES CHARGED IN $USD, MAY BE CONVERTED TO LOCAL CURRENCY USING PREVAILING CURRENT RATE
-      </div>
+    <!-- Calculation Section -->
+    <div class="fees-grid no-break">
+      <div class="label">Estimated Cost:</div>
+      <div class="value">{{.EstimatedCost}}</div>
 
-      <div class="signature-section">
-        <div class="signature-line"></div>
-        <div class="signature-label">MUNICIPAL OFFICIAL SIGNATURE</div>
-      </div>
+      <div class="label">Plan Structure Area (m²):</div>
+      <div class="value">{{.PlanArea}}</div>
+
+      <div class="label">Price Per Square Meter:</div>
+      <div class="value">{{.PricePerSquareMeter}}</div>
+
+      <div class="label">Permit Fee:</div>
+      <div class="value">{{.PermitFee}}</div>
+
+      <div class="label">Inspection Fee:</div>
+      <div class="value">{{.InspectionFee}}</div>
+
+      <div class="label">Development Fee:</div>
+      <div class="value">{{.DevelopmentFee}}</div>
+
+      <div class="label">VAT:</div>
+      <div class="value">{{.VATAmount}}</div>
+
+      <div class="label total-row">Total Dev. Permit Fees:</div>
+      <div class="value total-row">{{.TotalFees}}</div>
+    </div>
+
+    <!-- Total Box -->
+    <div class="total-fee-box no-break">
+      <div class="label">Total Fees Due: {{.TotalFees}} USD</div>
+    </div>
+    <br />
+    <div class="note">
+      N.B: Dev. Permit Fees charged in $USD, may be converted to local currency
+      using prevailing current rate
+    </div>
+
+    <div class="signature-section">
+      <div class="signature-line"></div>
+      <div class="signature-label">Council Official Signature:</div>
     </div>
   </body>
 </html>

@@ -16,52 +16,50 @@ import (
 
 // allModels defines all models that should be migrated and have permissions generated
 var allModels = []interface{}{
-	// 1. Core Authentication and Authorization Models
-	&models.Permission{},
-	&models.Role{},
-	&models.RolePermission{},
-	&models.Department{},
-	&models.User{},
-	&models.UserAuditLog{},
+    // 1. Core Authentication and Authorization Models
+    &models.Permission{},
+    &models.Role{},
+    &models.RolePermission{},
+    &models.Department{},
+    &models.User{},
+    &models.UserAuditLog{},
 
-	// 2. Document Management Models (standalone categories first)
-	&models.DocumentCategory{},
+    // 2. Document Management Models (standalone categories first)
+    &models.DocumentCategory{},
 
-	// 3. Property and Stand Management Models 
-	&models.DevelopmentCategory{},
-	&models.StandType{},
-	&models.Project{}, 
-	&models.Stand{},
+    // 3. Property and Stand Management Models 
+    &models.DevelopmentCategory{},
+    &models.StandType{},
+    &models.Project{}, 
+    &models.Stand{},
 
-	// 4. Applicant Models (before Application)
-	&models.Applicant{}, 
-	&models.ApplicantAdditionalPhone{},
-	&models.OrganisationRepresentative{},
-	&models.ApplicantOrganisationRepresentative{},
+    // 4. Applicant Models (before Application)
+    &models.Applicant{}, 
+    &models.ApplicantAdditionalPhone{},
+    &models.OrganisationRepresentative{},
+    &models.ApplicantOrganisationRepresentative{},
 
-	// 5. Financial Models
-	&models.Tariff{},
-	&models.VATRate{},
+    // 5. Financial Models
+    &models.Tariff{},
+    &models.VATRate{},
 
-	// 6. Document models (now all referenced tables exist)
-	&models.Document{}, 
-	&models.DocumentAuditLog{},
-	&models.DocumentVersion{},
-
-	// 7. Application models (references Applicant, Project, etc.)
+    // 6. Permit models (AFTER Application since it references Application)
+    &models.Permit{},
 	&models.Application{},
 
-	// 8. Permit models (AFTER Application since it references Application)
-	&models.Permit{},
+    // 7. Document models (now all referenced tables exist)
+    &models.Document{}, 
+    &models.DocumentAuditLog{},
+    &models.DocumentVersion{},
 
-	// 9. Other models that reference the above
-	&models.Comment{},
-	&models.ApplicantDocument{},
-	&models.AllStandOwners{},
-	&models.EmailLog{},
-	&models.BulkUploadErrorProjects{},
-	&models.BulkUploadErrorStands{},
-	&models.BulkStandUploadError{},
+    // 8. Other models that reference the above
+    &models.Comment{},
+    &models.ApplicantDocument{},
+    &models.AllStandOwners{},
+    &models.EmailLog{},
+    &models.BulkUploadErrorProjects{},
+    &models.BulkUploadErrorStands{},
+    &models.BulkStandUploadError{},
 }
 
 func ConfigureDatabase() *gorm.DB {
@@ -121,7 +119,7 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"tariffs",
+	// 	"applications",
 	// }
 
 	// for _, table := range specificTablesToDrop {

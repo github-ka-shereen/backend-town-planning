@@ -21,6 +21,7 @@ type ApplicationRepository interface {
 	DeactivateTariff(tariffID string, updatedBy string) (*models.Tariff, error)
 	GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error)
 	GetTariffByID(tariffID string) (*models.Tariff, error)
+	GetFilteredApplications(limit, offset int, filters map[string]string) ([]models.Application, int64, error)
 }
 
 type applicationRepository struct {
@@ -29,6 +30,88 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
+}
+
+// GetFilteredApplications fetches applications with filtering and pagination
+func (r *applicationRepository) GetFilteredApplications(limit, offset int, filters map[string]string) ([]models.Application, int64, error) {
+	var applications []models.Application
+	var total int64
+
+	// Start building the query with preloads
+	query := r.db.Model(&models.Application{}).
+		Preload("Applicant").
+		Preload("Tariff").
+		Preload("Tariff.DevelopmentCategory").
+		Preload("VATRate")
+
+	// Apply filters
+	if applicantID, exists := filters["applicant_id"]; exists && applicantID != "" {
+		query = query.Where("applicant_id = ?", applicantID)
+	}
+
+	if planNumber, exists := filters["plan_number"]; exists && planNumber != "" {
+		query = query.Where("plan_number ILIKE ?", "%"+planNumber+"%")
+	}
+
+	if permitNumber, exists := filters["permit_number"]; exists && permitNumber != "" {
+		query = query.Where("permit_number ILIKE ?", "%"+permitNumber+"%")
+	}
+
+	if status, exists := filters["status"]; exists && status != "" {
+		query = query.Where("status = ?", status)
+	}
+
+	if paymentStatus, exists := filters["payment_status"]; exists && paymentStatus != "" {
+		query = query.Where("payment_status = ?", paymentStatus)
+	}
+
+	if standID, exists := filters["stand_id"]; exists && standID != "" {
+		query = query.Where("stand_id = ?", standID)
+	}
+
+	if architectName, exists := filters["architect_name"]; exists && architectName != "" {
+		query = query.Where("architect_full_name ILIKE ?", "%"+architectName+"%")
+	}
+
+	if dateFrom, exists := filters["date_from"]; exists && dateFrom != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateFrom)
+		if err == nil {
+			query = query.Where("submission_date >= ?", parsedDate)
+		}
+	}
+
+	if dateTo, exists := filters["date_to"]; exists && dateTo != "" {
+		parsedDate, err := time.Parse("2006-01-02", dateTo)
+		if err == nil {
+			// Add one day to include the entire end date
+			parsedDate = parsedDate.Add(24 * time.Hour)
+			query = query.Where("submission_date < ?", parsedDate)
+		}
+	}
+
+	if isCollected, exists := filters["is_collected"]; exists && isCollected != "" {
+		if isCollected == "true" {
+			query = query.Where("is_collected = ?", true)
+		} else if isCollected == "false" {
+			query = query.Where("is_collected = ?", false)
+		}
+	}
+
+	// Count total number of records matching the filters
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch paginated applications, ordered by submission date (descending) to show latest first
+	if err := query.
+		Order("submission_date DESC, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&applications).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return applications, total, nil
 }
 
 // GetTariffByID fetches a tariff by ID

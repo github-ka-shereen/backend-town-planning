@@ -209,11 +209,17 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 	// Generate the quotation PDF
 	pdfPath, err := utils.GenerateDevelopmentPermitQuotation(*createdApplication, filename)
 	if err != nil {
-		config.Logger.Error("Failed to generate quotation", zap.Error(err))
-		// Don't return error here, just log it and continue
-		config.Logger.Error("Quotation generation failed but application was created",
+		config.Logger.Error("Failed to generate quotation PDF",
 			zap.Error(err),
 			zap.String("applicationID", createdApplication.ID.String()))
+
+		// Rollback transaction since PDF generation failed
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Application created but quotation generation failed",
+			"error":   err.Error(),
+		})
 	} else {
 		config.Logger.Info("Quotation generated successfully",
 			zap.String("pdfPath", pdfPath),
@@ -337,6 +343,7 @@ func (ac *ApplicationController) createApplication(tx *gorm.DB, application *mod
 	// Preload relationships for the response
 	if err := tx.Preload("Applicant").
 		Preload("Tariff").
+		Preload("Stand").
 		Preload("Tariff.DevelopmentCategory").
 		Preload("VATRate").
 		First(application, application.ID).Error; err != nil {

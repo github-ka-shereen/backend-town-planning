@@ -154,6 +154,7 @@ type Application struct {
 	// Property details
 	PropertyTypeID *uuid.UUID `gorm:"type:uuid;index" json:"property_type_id"`
 	StandID        *string    `gorm:"index" json:"stand_id"`
+	Stand          *Stand     `gorm:"foreignKey:StandID" json:"stand,omitempty"`
 	ApplicantID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
 
 	// Reference to the actual rates used for this application

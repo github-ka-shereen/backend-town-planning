@@ -28,4 +28,5 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/add-new-tariff", applicationController.CreateNewTariff)
 	applicationRoutes.Get("/filtered-development-tariffs", applicationController.GetFilteredDevelopmentTariffsController)
 	applicationRoutes.Post("/create-application", applicationController.CreateApplicationController)
+	applicationRoutes.Get("/filtered-applications", applicationController.GetFilteredApplicationsController)
 }
