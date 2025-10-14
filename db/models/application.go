@@ -119,26 +119,26 @@ type VATRate struct {
 
 // Application model
 type Application struct {
-	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	PlanNumber string    `gorm:"unique;not null;index" json:"plan_number"`
+	ID                   uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	PlanNumber           string    `gorm:"unique;not null;index" json:"plan_number"`
+	PermitNumber         string    `gorm:"unique;not null;index" json:"permit_number"`
+	ArchitectFullName    *string   `json:"architect_full_name"`
+	ArchitectEmail       *string   `json:"architect_email"`
+	ArchitectPhoneNumber *string   `json:"architect_phone_number"`
 
 	// Planning details
 	PlanArea *decimal.Decimal `gorm:"type:decimal(15,2)" json:"plan_area"`
 
 	// Financial calculations
-	PricePerSquareMeter *decimal.Decimal `gorm:"type:decimal(15,2)" json:"price_per_square_meter"`
-	PermitFee           *decimal.Decimal `gorm:"type:decimal(15,2)" json:"permit_fee"`
-	InspectionFee       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"inspection_fee"`
-	DevelopmentLevy     *decimal.Decimal `gorm:"type:decimal(15,2)" json:"development_levy"`
-	VATAmount           *decimal.Decimal `gorm:"type:decimal(15,2)" json:"vat_amount"`
-	TotalCost           *decimal.Decimal `gorm:"type:decimal(15,2)" json:"total_cost"`
-	EstimatedCost       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"estimated_cost"`
+	DevelopmentLevy *decimal.Decimal `gorm:"type:decimal(15,2)" json:"development_levy"`
+	VATAmount       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"vat_amount"`
+	TotalCost       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"total_cost"`
+	EstimatedCost   *decimal.Decimal `gorm:"type:decimal(15,2)" json:"estimated_cost"`
 
 	// Payment tracking
-	PaymentStatus PaymentStatus    `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
-	ReceiptNumber *string          `gorm:"index" json:"receipt_number"`
-	PaymentDate   *time.Time       `json:"payment_date"`
-	AmountPaid    *decimal.Decimal `gorm:"type:decimal(15,2)" json:"amount_paid"`
+	PaymentStatus PaymentStatus `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
+	ReceiptNumber *string       `gorm:"index" json:"receipt_number"`
+	ReceiptDate   *time.Time    `json:"receipt_date"`
 
 	// Status and dates
 	Status         ApplicationStatus `gorm:"type:varchar(20);default:'SUBMITTED';index" json:"status"`
@@ -169,7 +169,6 @@ type Application struct {
 	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
 	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
 	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
-
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 	UpdatedBy *string        `json:"updated_by"`

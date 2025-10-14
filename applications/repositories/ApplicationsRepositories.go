@@ -20,6 +20,7 @@ type ApplicationRepository interface {
 	GetActiveTariffForCategory(developmentCategoryID string) (*models.Tariff, error)
 	DeactivateTariff(tariffID string, updatedBy string) (*models.Tariff, error)
 	GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error)
+	GetTariffByID(tariffID string) (*models.Tariff, error)
 }
 
 type applicationRepository struct {
@@ -28,6 +29,15 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
+}
+
+// GetTariffByID fetches a tariff by ID
+func (r *applicationRepository) GetTariffByID(tariffID string) (*models.Tariff, error) {
+	var tariff models.Tariff
+	if err := r.db.Preload("DevelopmentCategory").First(&tariff, tariffID).Error; err != nil {
+		return nil, err
+	}
+	return &tariff, nil
 }
 
 // GetFilteredDevelopmentTariffs fetches tariffs with filtering and pagination

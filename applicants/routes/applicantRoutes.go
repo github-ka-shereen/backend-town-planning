@@ -28,4 +28,5 @@ func ApplicantInitRoutes(
 	api.Get("/applicants/filtered", applicantController.GetFilteredApplicantsController)
 	api.Post("/applicants/vat-rates", applicantController.CreateVATRateController)
 	api.Get("/applicants/vat-rates/filtered", applicantController.GetFilteredVatRatesController)
+	api.Get("/applicants/vat-rates/active", applicantController.GetActiveVATRateController)
 }

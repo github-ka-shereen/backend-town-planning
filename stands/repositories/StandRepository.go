@@ -32,6 +32,7 @@ type StandRepository interface {
 	GetFilteredAllStandsResults(filters map[string]string, userEmail string) ([]models.Stand, int64, bool, error)
 	GetFilteredReservedStands(filters map[string]string, paginationEnabled bool, limit, offset int) ([]models.Reservation, int64, error)
 	GetFilteredAllFilteredReservedStandsResults(filters map[string]string, userEmail string) ([]models.Reservation, int64, bool, error)
+	GetAllStands() ([]models.Stand, error)
 }
 
 type standRepository struct {
@@ -42,6 +43,12 @@ func NewStandRepository(db *gorm.DB) StandRepository {
 	return &standRepository{
 		db: db,
 	}
+}
+
+func (r *standRepository) GetAllStands() ([]models.Stand, error) {
+	var stands []models.Stand
+	err := r.db.Find(&stands).Error
+	return stands, err
 }
 
 // BulkCreateStands inserts multiple stands in batches

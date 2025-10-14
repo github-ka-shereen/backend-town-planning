@@ -46,4 +46,11 @@ func IndexBleveData(
 	} else if err := bleveRepo.IndexExistingProjects(projects); err != nil {
 		config.Logger.Error("Failed to index projects into Bleve", zap.Error(err))
 	}
+
+	// index stands
+	if stands, err := standRepo.GetAllStands(); err != nil {
+		config.Logger.Error("Error fetching stands for Bleve indexing", zap.Error(err))
+	} else if err := bleveRepo.IndexExistingStands(stands); err != nil {
+		config.Logger.Error("Failed to index stands into Bleve", zap.Error(err))
+	}
 }
