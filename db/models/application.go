@@ -39,10 +39,10 @@ const (
 	PermitSuspended PermitStatus = "SUSPENDED"
 )
 
-// PropertyType model for dynamic property types
+// DevelopmentCategory model for dynamic development categories
 type DevelopmentCategory struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	Name        string    `gorm:"unique;not null" json:"name"` // e.g., "COMMERCIAL & INDUSTRIAL", "MEDIUM & LOW DENSITY", "CHURCH STRUCTURES" same as stand type
+	Name        string    `gorm:"unique;not null" json:"name"` // e.g., "COMMERCIAL & INDUSTRIAL", "MEDIUM & LOW DENSITY", "CHURCH STRUCTURES" appropriate for the stand type
 	Description *string   `json:"description"`
 	IsSystem    bool      `gorm:"default:false" json:"is_system"` // System types cannot be modified
 	IsActive    bool      `gorm:"default:true" json:"is_active"`
