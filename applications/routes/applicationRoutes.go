@@ -23,4 +23,8 @@ func ApplicationRouterInit(
 
 	applicationRoutes := app.Group("/api/v1")
 	applicationRoutes.Post("/development-categories", applicationController.CreateDevelopmentCategory)
+	applicationRoutes.Get("/development-categories", applicationController.GetAllDevelopmentCategories)
+	applicationRoutes.Get("/all-development-categories", applicationController.GetAllActiveDevelopmentCategories)
+	applicationRoutes.Post("/add-new-tariff", applicationController.CreateNewTariff)
+	applicationRoutes.Get("/filtered-development-tariffs", applicationController.GetFilteredDevelopmentTariffsController)
 }

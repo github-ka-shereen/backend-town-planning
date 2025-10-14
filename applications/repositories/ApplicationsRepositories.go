@@ -1,7 +1,9 @@
+// repositories/application_repository.go
 package repositories
 
 import (
 	"strings"
+	"time"
 	"town-planning-backend/db/models"
 
 	"gorm.io/gorm"
@@ -10,19 +12,65 @@ import (
 type ApplicationRepository interface {
 	CreateDevelopmentCategory(category *models.DevelopmentCategory) (*models.DevelopmentCategory, error)
 	GetDevelopmentCategoryByName(name string) (*models.DevelopmentCategory, error)
+	GetFilteredDevelopmentCategories(pageSize, offset int, filters map[string]string) ([]models.DevelopmentCategory, int64, error)
+	GetAllDevelopmentCategories(isActive *bool) ([]models.DevelopmentCategory, error)
+
+	// Tariff methods (optional - you can use the controller helpers instead)
+	CreateTariff(tariff *models.Tariff) (*models.Tariff, error)
+	GetActiveTariffForCategory(developmentCategoryID string) (*models.Tariff, error)
+	DeactivateTariff(tariffID string, updatedBy string) (*models.Tariff, error)
+	GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error)
 }
 
 type applicationRepository struct {
-	DB *gorm.DB
+	db *gorm.DB
 }
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
-	return &applicationRepository{DB: db}
+	return &applicationRepository{db: db}
+}
+
+// GetFilteredDevelopmentTariffs fetches tariffs with filtering and pagination
+func (r *applicationRepository) GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error) {
+	var tariffs []models.Tariff
+	var total int64
+
+	// Start building the query
+	query := r.db.Model(&models.Tariff{}).Preload("DevelopmentCategory")
+
+	// Apply filters
+	if developmentCategoryID, exists := filters["development_category_id"]; exists && developmentCategoryID != "" {
+		query = query.Where("development_category_id = ?", developmentCategoryID)
+	}
+
+	if isActive, exists := filters["is_active"]; exists && isActive != "" {
+		if isActive == "true" {
+			query = query.Where("is_active = ?", true)
+		} else if isActive == "false" {
+			query = query.Where("is_active = ?", false)
+		}
+	}
+
+	// Count total number of records matching the filters
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch paginated tariffs, ordered by ValidFrom (descending) to show latest first
+	if err := query.
+		Order("valid_from DESC, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&tariffs).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return tariffs, total, nil
 }
 
 // CreateDevelopmentCategory creates a new development category
 func (r *applicationRepository) CreateDevelopmentCategory(category *models.DevelopmentCategory) (*models.DevelopmentCategory, error) {
-	if err := r.DB.Create(category).Error; err != nil {
+	if err := r.db.Create(category).Error; err != nil {
 		return nil, err
 	}
 	return category, nil
@@ -34,8 +82,65 @@ func (r *applicationRepository) GetDevelopmentCategoryByName(name string) (*mode
 
 	cleanName := strings.ToUpper(strings.TrimSpace(name))
 
-	if err := r.DB.Where("UPPER(TRIM(name)) = ? AND is_active = ?", cleanName, true).First(&category).Error; err != nil {
+	if err := r.db.Where("UPPER(TRIM(name)) = ? AND is_active = ?", cleanName, true).First(&category).Error; err != nil {
 		return nil, err
 	}
 	return &category, nil
+}
+
+// CreateTariff creates a new tariff
+func (r *applicationRepository) CreateTariff(tariff *models.Tariff) (*models.Tariff, error) {
+	if err := r.db.Create(tariff).Error; err != nil {
+		return nil, err
+	}
+
+	// Preload the development category relationship
+	if err := r.db.Preload("DevelopmentCategory").First(tariff, tariff.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return tariff, nil
+}
+
+// GetActiveTariffForCategory gets the currently active tariff for a category
+func (r *applicationRepository) GetActiveTariffForCategory(developmentCategoryID string) (*models.Tariff, error) {
+	var tariff models.Tariff
+
+	now := time.Now()
+	err := r.db.Where("development_category_id = ? AND is_active = ? AND valid_from <= ? AND (valid_to IS NULL OR valid_to >= ?)",
+		developmentCategoryID, true, now, now).
+		Order("valid_from DESC").
+		First(&tariff).Error
+
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return &tariff, nil
+}
+
+// DeactivateTariff deactivates a tariff
+func (r *applicationRepository) DeactivateTariff(tariffID string, updatedBy string) (*models.Tariff, error) {
+	var tariff models.Tariff
+
+	if err := r.db.Where("id = ?", tariffID).First(&tariff).Error; err != nil {
+		return nil, err
+	}
+
+	tariff.IsActive = false
+	tariff.UpdatedAt = time.Now()
+
+	if err := r.db.Save(&tariff).Error; err != nil {
+		return nil, err
+	}
+
+	// Preload the development category for the response
+	if err := r.db.Preload("DevelopmentCategory").First(&tariff, tariff.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &tariff, nil
 }

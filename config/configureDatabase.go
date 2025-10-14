@@ -121,7 +121,7 @@ func ConfigureDatabase() *gorm.DB {
 
 	// // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"stands",
+	// 	"tariffs",
 	// }
 
 	// for _, table := range specificTablesToDrop {

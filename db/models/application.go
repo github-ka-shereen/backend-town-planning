@@ -81,15 +81,15 @@ type Permit struct {
 
 // Tariff - defines the FEES for a development category during a specific period
 type Tariff struct {
-	ID                    uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
-	DevelopmentCategoryID uuid.UUID       `gorm:"type:uuid;not null;index" json:"development_category_id"`
-	PricePerSqM           decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"price_per_sq_m"`
-	PermitFee             decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"permit_fee"`
-	InspectionFee         decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"inspection_fee"`
-	DevelopmentLevy       decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy"` // Store as percentage (e.g., 15.00 for 15%)
-	ValidFrom             time.Time       `gorm:"not null;index" json:"valid_from"`
-	ValidTo               *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
-	IsActive              bool            `gorm:"default:true" json:"is_active"`
+	ID                     uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
+	DevelopmentCategoryID  uuid.UUID       `gorm:"type:uuid;not null;index" json:"development_category_id"`
+	PricePerSquareMeter    decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"price_per_square_meter"`
+	PermitFee              decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"permit_fee"`
+	InspectionFee          decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"inspection_fee"`
+	DevelopmentLevyPercent decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy_percent"` // Store as percentage (e.g., 15.00 for 15%)
+	ValidFrom              time.Time       `gorm:"not null;index" json:"valid_from"`
+	ValidTo                *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
+	IsActive               bool            `gorm:"default:true" json:"is_active"`
 
 	// Relationships
 	DevelopmentCategory DevelopmentCategory `gorm:"foreignKey:DevelopmentCategoryID" json:"development_category"`
