@@ -22,6 +22,7 @@ type ApplicationRepository interface {
 	GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error)
 	GetTariffByID(tariffID string) (*models.Tariff, error)
 	GetFilteredApplications(limit, offset int, filters map[string]string) ([]models.Application, int64, error)
+	GetApplicationById(applicationID string) (*models.Application, error)
 }
 
 type applicationRepository struct {
@@ -30,6 +31,20 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
+}
+
+func (r *applicationRepository) GetApplicationById(applicationID string) (*models.Application, error) {
+    var application models.Application
+    if err := r.db.
+        Preload("Applicant").
+        Preload("Tariff").
+        Preload("Tariff.DevelopmentCategory").
+        Preload("VATRate").
+        Where("id = ?", applicationID).
+        First(&application).Error; err != nil {
+        return nil, err
+    }
+    return &application, nil
 }
 
 // GetFilteredApplications fetches applications with filtering and pagination
