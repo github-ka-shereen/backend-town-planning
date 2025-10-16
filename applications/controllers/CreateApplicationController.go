@@ -225,6 +225,19 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 			zap.String("pdfPath", pdfPath),
 			zap.String("applicationID", createdApplication.ID.String()))
 	}
+	
+	createdApplication.QuotationFilePath = pdfPath
+	
+	// Update the application within the transaction
+	if err := tx.Save(createdApplication).Error; err != nil {
+		config.Logger.Error("Failed to update application", zap.Error(err))
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to update application",
+			"error":   err.Error(),
+		})
+	}
 
 	// // Index the application in Bleve within the transaction
 	// if ac.BleveRepo != nil {

@@ -164,6 +164,8 @@ type Application struct {
 	PermitID *uuid.UUID `gorm:"type:uuid;index" json:"permit_id"`
 	Permit   *Permit    `gorm:"foreignKey:PermitID" json:"permit,omitempty"`
 
+	QuotationFilePath string `gorm:"type:text" json:"quotation_file_path"`
+
 	// Relationships
 	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
 	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
