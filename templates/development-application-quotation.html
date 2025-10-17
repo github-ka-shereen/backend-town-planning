@@ -187,6 +187,10 @@
       .no-break {
         page-break-inside: avoid;
       }
+
+      .currency-symbol {
+        font-weight: bold;
+      }
     </style>
   </head>
   <body>
@@ -213,6 +217,11 @@
 
     <div class="title-box">
       <h2>Development Fees Due Breakdown</h2>
+    </div>
+
+    <!-- Print Date -->
+    <div class="print-date">
+      Printed on: {{.PrintDate}}
     </div>
 
     <!-- Details Section -->
@@ -242,37 +251,38 @@
     <!-- Calculation Section -->
     <div class="fees-grid no-break">
       <div class="label">Estimated Cost:</div>
-      <div class="value">{{.EstimatedCost}}</div>
+      <div class="value">{{.EstimatedCost}} {{.Currency}}</div>
 
       <div class="label">Plan Structure Area (m²):</div>
-      <div class="value">{{.PlanArea}}</div>
+      <div class="value">{{.PlanArea}} m²</div>
 
       <div class="label">Price Per Square Meter:</div>
-      <div class="value">{{.PricePerSquareMeter}}</div>
+      <div class="value">{{.PricePerSquareMeter}} {{.Currency}}</div>
 
       <div class="label">Permit Fee:</div>
-      <div class="value">{{.PermitFee}}</div>
+      <div class="value">{{.PermitFee}} {{.Currency}}</div>
 
       <div class="label">Inspection Fee:</div>
-      <div class="value">{{.InspectionFee}}</div>
+      <div class="value">{{.InspectionFee}} {{.Currency}}</div>
 
       <div class="label">Development Fee:</div>
-      <div class="value">{{.DevelopmentFee}}</div>
+      <div class="value">{{.DevelopmentFee}} {{.Currency}}</div>
 
       <div class="label">VAT:</div>
-      <div class="value">{{.VATAmount}}</div>
+      <div class="value">{{.VATAmount}} {{.Currency}}</div>
 
       <div class="label total-row">Total Dev. Permit Fees:</div>
-      <div class="value total-row">{{.TotalFees}}</div>
+      <div class="value total-row">{{.TotalFees}} {{.Currency}}</div>
     </div>
 
     <!-- Total Box -->
     <div class="total-fee-box no-break">
-      <div class="label">Total Fees Due: {{.TotalFees}} USD</div>
+      <div class="label">Total Fees Due:</div>
+      <div class="amount">{{.TotalFees}} {{.Currency}}</div>
     </div>
-    <br />
+
     <div class="note">
-      N.B: Dev. Permit Fees charged in $USD, may be converted to local currency
+      N.B: Dev. Permit Fees charged in {{.Currency}}, may be converted to local currency
       using prevailing current rate
     </div>
 

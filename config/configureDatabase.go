@@ -14,7 +14,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// allModels defines all models that should be migrated and have permissions generated
 var allModels = []interface{}{
 	// 1. Core Authentication and Authorization Models
 	&models.Permission{},
@@ -43,9 +42,17 @@ var allModels = []interface{}{
 	&models.Tariff{},
 	&models.VATRate{},
 
+	// 5a. Bank / Forex models (needed for Payment)
+	&models.Bank{},
+	&models.BankAccount{},
+	&models.ExchangeRate{},
+
 	// 6. Permit models (AFTER Application since it references Application)
 	&models.Permit{},
 	&models.Application{},
+
+	// 6a. Payment tracking
+	&models.Payment{},
 
 	// 7. Document models (now all referenced tables exist)
 	&models.Document{},
@@ -61,6 +68,7 @@ var allModels = []interface{}{
 	&models.BulkUploadErrorStands{},
 	&models.BulkStandUploadError{},
 }
+
 
 func ConfigureDatabase() *gorm.DB {
 	host := GetEnv("DB_HOST")

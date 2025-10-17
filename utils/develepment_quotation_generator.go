@@ -33,6 +33,7 @@ type QuotationData struct {
 	PermitType          string
 	DevelopmentType     string
 	PrintDate           string
+	Currency            string
 	PlanArea            string
 	PricePerSquareMeter string
 	EstimatedCost       string
@@ -90,6 +91,7 @@ func prepareQuotationData(application models.Application) (QuotationData, error)
 		PricePerSquareMeter: formatCurrency(application.Tariff.PricePerSquareMeter),
 		EstimatedCost:       formatCurrency(*application.EstimatedCost),
 		PermitFee:           formatCurrency(application.Tariff.PermitFee),
+		Currency:            application.Tariff.Currency,
 		InspectionFee:       formatCurrency(application.Tariff.InspectionFee),
 		DevelopmentFee:      formatCurrency(*application.DevelopmentLevy),
 		VATAmount:           formatCurrency(*application.VATAmount),

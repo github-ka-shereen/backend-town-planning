@@ -19,6 +19,7 @@ type CreateTariffRequest struct {
 	PricePerSquareMeter    decimal.Decimal `json:"price_per_square_meter" validate:"required,min=0"`
 	PermitFee              decimal.Decimal `json:"permit_fee" validate:"required,min=0"`
 	InspectionFee          decimal.Decimal `json:"inspection_fee" validate:"required,min=0"`
+	Currency               string          `json:"currency" validate:"required"`
 	DevelopmentLevyPercent decimal.Decimal `json:"development_levy_percent" validate:"required,min=0,max=100"`
 	IsActive               bool            `json:"is_active"`
 	CreatedBy              string          `json:"created_by" validate:"required,email"`
@@ -128,6 +129,7 @@ func (ac *ApplicationController) CreateNewTariff(c *fiber.Ctx) error {
 		PricePerSquareMeter:    req.PricePerSquareMeter,
 		PermitFee:              req.PermitFee,
 		InspectionFee:          req.InspectionFee,
+		Currency:               req.Currency,
 		DevelopmentLevyPercent: req.DevelopmentLevyPercent,
 		ValidFrom:              time.Now(),
 		ValidTo:                nil, // NULL means currently active
