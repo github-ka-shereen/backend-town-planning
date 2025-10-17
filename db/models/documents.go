@@ -20,6 +20,9 @@ const (
 	ProcessedDevelopmentPermitQuotation DocumentType = "PROCESSED_DEVELOPMENT_PERMIT_QUOTATION"
 	GeneratedTPD1Form                   DocumentType = "GENERATED_TPD1_FORM"
 	ProcessedTPD1Form                   DocumentType = "PROCESSED_TPD1_FORM"
+	InitialPlanDocument                 DocumentType = "INITIAL_PLAN"
+	StructuralEngineeringCertificateDocument DocumentType = "STRUCTURAL_ENGINEERING_CERTIFICATE"
+	RingBeamCertificateDocument         DocumentType = "RING_BEAM_CERTIFICATE"
 )
 
 // ActionType defines the type of action performed on a document
@@ -53,7 +56,7 @@ type Document struct {
 	ID           uuid.UUID    `gorm:"type:uuid;primary_key;" json:"id"`
 	DocumentCode *string      `gorm:"index" json:"document_code"`
 	FileName     string       `gorm:"not null" json:"file_name"`
-	DocumentType DocumentType `gorm:"type:varchar(30);not null" json:"document_type"`
+	DocumentType DocumentType `gorm:"type:varchar(100);not null" json:"document_type"`
 	CategoryID   *uuid.UUID   `gorm:"type:uuid" json:"category_id"` // Optional category reference
 	FileSize     int64        `gorm:"not null" json:"file_size"`
 	FilePath     string       `gorm:"not null" json:"file_path"`

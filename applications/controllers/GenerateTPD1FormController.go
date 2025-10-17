@@ -84,7 +84,7 @@ func (ac *ApplicationController) GenerateTPD1FormController(c *fiber.Ctx) error 
 		Preload("Applicant").
 		Preload("Tariff").
 		Preload("Stand").
-		Preload("Payments", "payment_for = ? AND payment_status = ?", "APPLICATION_FEE", "PAID").
+		Preload("Payment", "payment_for = ? AND payment_status = ?", "APPLICATION_FEE", "PAID").
 		Preload("VATRate").
 		First(&application, "id = ?", appUUID).Error; err != nil {
 
