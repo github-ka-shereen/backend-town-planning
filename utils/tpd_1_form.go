@@ -176,15 +176,10 @@ func splitFullName(fullName string) (surname, otherNames string) {
 }
 
 func getReceiptNumber(application models.Application) string {
-	if len(application.Payments) == 0 {
-		return ""
-	}
 
 	// Option 1: Return the latest paid payment's receipt number
-	for _, payment := range application.Payments {
-		if payment.PaymentFor == "APPLICATION_FEE" && payment.PaymentStatus == "PAID" && payment.ReceiptNumber != "" {
-			return payment.ReceiptNumber
-		}
+	if application.Payment.ReceiptNumber != "" {
+		return application.Payment.ReceiptNumber
 	}
 
 	return ""

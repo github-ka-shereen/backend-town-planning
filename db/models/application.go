@@ -164,7 +164,7 @@ type Application struct {
 	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
 	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
 	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
-	Payments  []Payment  `gorm:"foreignKey:ApplicationID" json:"payments,omitempty"`
+	Payment   Payment    `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
