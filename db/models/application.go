@@ -20,16 +20,6 @@ const (
 	ExpiredApplication     ApplicationStatus = "EXPIRED"
 )
 
-type PaymentStatus string
-
-const (
-	PendingPayment   PaymentStatus = "PENDING"
-	PaidPayment      PaymentStatus = "PAID"
-	PartialPayment   PaymentStatus = "PARTIAL"
-	RefundedPayment  PaymentStatus = "REFUNDED"
-	CancelledPayment PaymentStatus = "CANCELLED"
-)
-
 type PermitStatus string
 
 const (
@@ -79,20 +69,22 @@ type Permit struct {
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 }
 
-// Tariff - defines the FEES for a development category during a specific period
+// Tariff defines the FEES for a development category during a specific period
 type Tariff struct {
 	ID                     uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
 	DevelopmentCategoryID  uuid.UUID       `gorm:"type:uuid;not null;index" json:"development_category_id"`
+	Currency               string          `gorm:"type:varchar(10);not null" json:"currency"` // e.g., USD, ZWL
 	PricePerSquareMeter    decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"price_per_square_meter"`
 	PermitFee              decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"permit_fee"`
 	InspectionFee          decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"inspection_fee"`
-	DevelopmentLevyPercent decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy_percent"` // Store as percentage (e.g., 15.00 for 15%)
+	DevelopmentLevyPercent decimal.Decimal `gorm:"type:decimal(15,2);not null" json:"development_levy_percent"` // e.g., 15.00 = 15%
 	ValidFrom              time.Time       `gorm:"not null;index" json:"valid_from"`
 	ValidTo                *time.Time      `gorm:"index" json:"valid_to"` // NULL means currently active
 	IsActive               bool            `gorm:"default:true" json:"is_active"`
 
 	// Relationships
 	DevelopmentCategory DevelopmentCategory `gorm:"foreignKey:DevelopmentCategoryID" json:"development_category"`
+	Payments            []Payment           `gorm:"foreignKey:TariffID" json:"payments"` // Link to related payments (optional)
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -117,7 +109,6 @@ type VATRate struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// Application model
 type Application struct {
 	ID                   uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	PlanNumber           string    `gorm:"unique;not null;index" json:"plan_number"`
@@ -129,16 +120,14 @@ type Application struct {
 	// Planning details
 	PlanArea *decimal.Decimal `gorm:"type:decimal(15,2)" json:"plan_area"`
 
-	// Financial calculations
+	// Financial summary
 	DevelopmentLevy *decimal.Decimal `gorm:"type:decimal(15,2)" json:"development_levy"`
 	VATAmount       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"vat_amount"`
 	TotalCost       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"total_cost"`
 	EstimatedCost   *decimal.Decimal `gorm:"type:decimal(15,2)" json:"estimated_cost"`
 
-	// Payment tracking
+	// Payment tracking (overall, not individual receipts)
 	PaymentStatus PaymentStatus `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
-	ReceiptNumber *string       `gorm:"index" json:"receipt_number"`
-	ReceiptDate   *time.Time    `json:"receipt_date"`
 
 	// Status and dates
 	Status         ApplicationStatus `gorm:"type:varchar(20);default:'SUBMITTED';index" json:"status"`
@@ -161,9 +150,6 @@ type Application struct {
 	TariffID  *uuid.UUID `gorm:"type:uuid;index" json:"tariff_id"`
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
-	PermitID *uuid.UUID `gorm:"type:uuid;index" json:"permit_id"`
-	Permit   *Permit    `gorm:"foreignKey:PermitID" json:"permit,omitempty"`
-
 	QuotationFilePath string `gorm:"type:text" json:"quotation_file_path"`
 
 	// Relationships
@@ -172,6 +158,8 @@ type Application struct {
 	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
 	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
 	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
+	Payments  []Payment  `gorm:"foreignKey:ApplicationID" json:"payments,omitempty"` 
+
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 	UpdatedBy *string        `json:"updated_by"`

@@ -16,50 +16,50 @@ import (
 
 // allModels defines all models that should be migrated and have permissions generated
 var allModels = []interface{}{
-    // 1. Core Authentication and Authorization Models
-    &models.Permission{},
-    &models.Role{},
-    &models.RolePermission{},
-    &models.Department{},
-    &models.User{},
-    &models.UserAuditLog{},
+	// 1. Core Authentication and Authorization Models
+	&models.Permission{},
+	&models.Role{},
+	&models.RolePermission{},
+	&models.Department{},
+	&models.User{},
+	&models.UserAuditLog{},
 
-    // 2. Document Management Models (standalone categories first)
-    &models.DocumentCategory{},
+	// 2. Document Management Models (standalone categories first)
+	&models.DocumentCategory{},
 
-    // 3. Property and Stand Management Models 
-    &models.DevelopmentCategory{},
-    &models.StandType{},
-    &models.Project{}, 
-    &models.Stand{},
+	// 3. Property and Stand Management Models
+	&models.DevelopmentCategory{},
+	&models.StandType{},
+	&models.Project{},
+	&models.Stand{},
 
-    // 4. Applicant Models (before Application)
-    &models.Applicant{}, 
-    &models.ApplicantAdditionalPhone{},
-    &models.OrganisationRepresentative{},
-    &models.ApplicantOrganisationRepresentative{},
+	// 4. Applicant Models (before Application)
+	&models.Applicant{},
+	&models.ApplicantAdditionalPhone{},
+	&models.OrganisationRepresentative{},
+	&models.ApplicantOrganisationRepresentative{},
 
-    // 5. Financial Models
-    &models.Tariff{},
-    &models.VATRate{},
+	// 5. Financial Models
+	&models.Tariff{},
+	&models.VATRate{},
 
-    // 6. Permit models (AFTER Application since it references Application)
-    &models.Permit{},
+	// 6. Permit models (AFTER Application since it references Application)
+	&models.Permit{},
 	&models.Application{},
 
-    // 7. Document models (now all referenced tables exist)
-    &models.Document{}, 
-    &models.DocumentAuditLog{},
-    &models.DocumentVersion{},
+	// 7. Document models (now all referenced tables exist)
+	&models.Document{},
+	&models.DocumentAuditLog{},
+	&models.DocumentVersion{},
 
-    // 8. Other models that reference the above
-    &models.Comment{},
-    &models.ApplicantDocument{},
-    &models.AllStandOwners{},
-    &models.EmailLog{},
-    &models.BulkUploadErrorProjects{},
-    &models.BulkUploadErrorStands{},
-    &models.BulkStandUploadError{},
+	// 8. Other models that reference the above
+	&models.Comment{},
+	&models.ApplicantDocument{},
+	&models.AllStandOwners{},
+	&models.EmailLog{},
+	&models.BulkUploadErrorProjects{},
+	&models.BulkUploadErrorStands{},
+	&models.BulkStandUploadError{},
 }
 
 func ConfigureDatabase() *gorm.DB {
@@ -87,12 +87,9 @@ func ConfigureDatabase() *gorm.DB {
 	}
 
 	// ===== ADD YOUR CLEANUP CODE HERE =====
-	// Define a skip list for tables that should NOT be dropped
+	// // Define a skip list for tables that should NOT be dropped
 	// skipTables := map[string]bool{
-	// 	// "users":      true, // Example: keep users table
-	// 	// "clients":    true, // Example: keep clients table
-	// 	// "email_logs": true, // Example: keep email_logs table
-	// 	// Add other tables to preserve here
+	// 	// "users": true,
 	// }
 
 	// // Drop all tables EXCEPT skipTables
@@ -108,6 +105,11 @@ func ConfigureDatabase() *gorm.DB {
 	// 		log.Printf("[DB-CLEANUP] Dropped table: %s", table)
 	// 	}
 	// }
+
+	// ===== END Drop all tables =====
+
+
+	// ===== Drop specific tables =====
 
 	// If you need to drop specific tables in a particular order (like join tables first),
 	// you can add that logic here:
@@ -127,6 +129,8 @@ func ConfigureDatabase() *gorm.DB {
 	// 		log.Printf("Failed to drop table %s: %v", table, err)
 	// 	}
 	// }
+
+	// ===== END Drop specific tables =====
 
 	// // ===== END OF CLEANUP CODE =====
 
