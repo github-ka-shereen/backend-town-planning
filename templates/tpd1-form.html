@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @page {
+        size: A4;
+        margin: 15mm;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 10pt;
+        color: #000;
+        margin: 0;
+        padding: 0;
+        line-height: 1.3;
+      }
+
+      /* Header Section */
+      .date-top {
+        text-align: left;
+        font-size: 9pt;
+        margin-bottom: 8pt;
+      }
+
+      .header {
+        text-align: center;
+        margin-bottom: 10pt;
+      }
+
+      .logo {
+        width: 60pt;
+        height: 60pt;
+        margin: 0 auto 6pt auto;
+      }
+
+      .logo img {
+        width: 60pt;
+        height: 60pt;
+      }
+
+      .municipality-name {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 12pt;
+        margin-bottom: 4pt;
+      }
+
+      .contact-block {
+        font-size: 8pt;
+        line-height: 1.3;
+        text-align: center;
+        margin-top: 4pt;
+      }
+
+      .red-line {
+        height: 2px;
+        background-color: #a00000;
+        margin: 8pt 0;
+      }
+
+      /* Form Title Section */
+      .form-title-section {
+        text-align: center;
+        margin: 10pt 0;
+      }
+
+      .form-title {
+        font-weight: bold;
+        font-size: 11pt;
+        margin-bottom: 4pt;
+      }
+
+      .form-number {
+        font-weight: bold;
+        font-size: 10pt;
+      }
+
+      /* Metadata Grid */
+      .metadata-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 6pt;
+        margin: 10pt 0;
+        font-size: 9pt;
+      }
+
+      .metadata-item {
+        display: flex;
+        align-items: center;
+      }
+
+      .metadata-label {
+        font-weight: bold;
+        margin-right: 4pt;
+      }
+
+      .metadata-value {
+        border-bottom: 1px solid #000;
+        flex: 1;
+        min-height: 14pt;
+        padding-left: 4pt;
+      }
+
+      /* Section Headers */
+      .section-header {
+        background-color: #e6e6e6;
+        padding: 4pt 6pt;
+        font-weight: bold;
+        font-size: 10pt;
+        text-transform: uppercase;
+        margin: 12pt 0 8pt 0;
+        border: 1px solid #999;
+      }
+
+      /* Form Fields */
+      .form-row {
+        display: flex;
+        margin-bottom: 8pt;
+        font-size: 9pt;
+      }
+
+      .field-label {
+        font-weight: bold;
+        margin-right: 6pt;
+        min-width: 140pt;
+      }
+
+      .field-value {
+        border-bottom: 1px solid #000;
+        flex: 1;
+        min-height: 14pt;
+        padding-left: 4pt;
+      }
+
+      .checkbox-group {
+        display: flex;
+        gap: 15pt;
+        margin-left: 10pt;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 4pt;
+      }
+
+      .checkbox {
+        width: 12pt;
+        height: 12pt;
+        border: 1px solid #000;
+        display: inline-block;
+      }
+
+      .checkbox.checked::after {
+        content: '✓';
+        display: block;
+        text-align: center;
+        line-height: 12pt;
+        font-weight: bold;
+      }
+
+      /* Text Area */
+      .text-area {
+        border: 1px solid #000;
+        min-height: 40pt;
+        padding: 4pt;
+        margin-top: 4pt;
+      }
+
+      /* Legal Text */
+      .legal-section {
+        margin: 12pt 0;
+        font-size: 9pt;
+        line-height: 1.4;
+      }
+
+      .legal-title {
+        font-weight: bold;
+        text-transform: uppercase;
+        margin-bottom: 6pt;
+      }
+
+      /* Signature Section */
+      .signature-section {
+        margin-top: 15pt;
+      }
+
+      .signature-row {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20pt;
+        margin-top: 10pt;
+      }
+
+      .signature-box {
+        text-align: center;
+      }
+
+      .signature-line {
+        border-top: 2px solid #000;
+        margin-top: 30pt;
+      }
+
+      .signature-label {
+        font-size: 9pt;
+        font-weight: bold;
+        margin-top: 4pt;
+      }
+
+      /* Footer Info */
+      .footer-info {
+        margin-top: 15pt;
+        padding: 8pt;
+        background-color: #f5f5f5;
+        border: 1px solid #ccc;
+        font-size: 8pt;
+      }
+
+      .page-break {
+        page-break-after: always;
+      }
+
+      /* Note Section */
+      .note-section {
+        margin: 10pt 0;
+        padding: 6pt;
+        border: 1px solid #000;
+        font-size: 8pt;
+        font-style: italic;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Page 1: Form Header and Basic Info -->
+    <div class="date-top">{{.FormDate}}</div>
+
+    <div class="header">
+      <div class="logo">
+        <img src="/logo" alt="Logo" />
+      </div>
+      <div class="municipality-name">Municipality of Redcliff</div>
+      <div class="contact-block">
+        P.O Box 187 Redcliff <br />
+        Tel: +263-55-212221, +263-772-345-678<br />
+        E-mail: redcliff@redcliffmunicipality.org.zw<br />
+        Website: www.redcliffmunicipality.co.zw
+      </div>
+    </div>
+
+    <div class="red-line"></div>
+
+    <div class="form-title-section">
+      <div class="form-title">C.E. FORM 135 TPD. 1 FORM</div>
+      <div class="form-number">{{.RegisteredNumber}}</div>
+    </div>
+
+    <!-- Metadata Section -->
+    <div class="metadata-grid">
+      <div class="metadata-item">
+        <span class="metadata-label">DATED:</span>
+        <span class="metadata-value">{{.ApplicationDate}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">RECEIPT NO.:</span>
+        <span class="metadata-value">{{.ReceiptNumber}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">DATE COMPLETE APPLICATION RECEIVED:</span>
+        <span class="metadata-value">{{.DateReceived}}</span>
+      </div>
+      <div class="metadata-item">
+        <span class="metadata-label">PERMIT NUMBER:</span>
+        <span class="metadata-value">{{.PermitNumber}}</span>
+      </div>
+      <div class="metadata-item" style="grid-column: 1 / -1">
+        <span class="metadata-label">REGISTERED NUMBER OF APPLICATION:</span>
+        <span class="metadata-value">{{.RegisteredNumber}}</span>
+      </div>
+    </div>
+
+    <!-- Legal Section -->
+    <div class="legal-section">
+      <div class="legal-title">
+        REGIONAL, TOWN AND COUNTRY PLANNING ACT, 1976
+      </div>
+      <div class="legal-title">APPLICATION</div>
+      <div class="legal-title">IN TERMS OF SECTION 26 OF THE ACT</div>
+      <p style="margin: 8pt 0">
+        For a Permit for Development not in District Council Areas
+      </p>
+
+      <div class="form-row">
+        <span class="field-label">To the</span>
+        <span class="field-value">{{.LocalPlanningAuthority}}</span>
+      </div>
+
+      <p style="margin: 8pt 0; font-size: 9pt">
+        (name and address of local planning authority)
+      </p>
+
+      <p style="margin: 8pt 0">
+        I/We hereby apply for a permit in terms of section 26 of the Act in
+        accordance with the particulars given below.
+      </p>
+
+      <p style="margin: 8pt 0">
+        My cheque / postal order No.
+        <span
+          style="
+            border-bottom: 1px solid #000;
+            display: inline-block;
+            min-width: 100pt;
+            padding: 0 4pt;
+          "
+          >{{.PaymentMethod}}</span
+        >
+        cash or revenue stamps in respect of the application fees, accordance
+        with Note 1 (b), accompanies this application form.
+      </p>
+    </div>
+
+    <!-- Signature Section for Application -->
+    <div class="signature-section">
+      <div class="signature-row">
+        <div class="signature-box">
+          <div class="signature-line"></div>
+          <div class="signature-label">Date</div>
+        </div>
+        <div class="signature-box">
+          <div class="signature-line"></div>
+          <div class="signature-label">Signature of applicant or agent</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Agent Authorization -->
+    <div style="margin-top: 15pt; font-size: 9pt">
+      <p style="font-weight: bold">If signed by agent:</p>
+      <p>
+        I authorize
+        <span
+          style="
+            border-bottom: 1px solid #000;
+            display: inline-block;
+            min-width: 200pt;
+            padding: 0 4pt;
+          "
+          >{{.AgentName}}</span
+        >
+        of
+      </p>
+      <p>
+        <span
+          style="
+            border-bottom: 1px solid #000;
+            display: inline-block;
+            width: 100%;
+            padding: 0 4pt;
+          "
+          >{{.AgentAddress}}</span
+        >
+      </p>
+      <p>
+        (telephone No.
+        <span
+          style="
+            border-bottom: 1px solid #000;
+            display: inline-block;
+            min-width: 120pt;
+            padding: 0 4pt;
+          "
+          >{{.AgentTelephone}}</span
+        >) to act as my agent in the submission of the application.
+      </p>
+
+      <div class="signature-row" style="margin-top: 20pt">
+        <div class="signature-box">
+          <div class="signature-line"></div>
+          <div class="signature-label">Signature of applicant</div>
+        </div>
+        <div class="signature-box">
+          <div class="signature-line"></div>
+          <div class="signature-label">
+            Signature of owner of land concerned<br />indicating his consent to
+            the application
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fee Box -->
+    <div class="footer-info"><strong>FOR $:</strong> {{.FeeSubmitted}}</div>
+
+    <div style="text-align: right; font-size: 8pt; margin-top: 10pt">
+      Page 1 of 2
+    </div>
+
+    <!-- Page Break -->
+    <div class="page-break"></div>
+
+    <!-- Page 2: Application Form Details -->
+
+    <div class="section-header">
+      APPLICATION FORM - PART 1: GENERAL INFORMATION
+    </div>
+    <p style="font-size: 8pt; font-style: italic; margin-bottom: 10pt">
+      (To be completed by all applicants as applicable)
+    </p>
+
+    <!-- 1. Applicant Details -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 10pt">
+      1. Applicant Details
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Surname / Company Name:</span>
+      <span class="field-value">{{.ApplicantSurname}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Other Names:</span>
+      <span class="field-value">{{.ApplicantOtherNames}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Postal Address:</span>
+      <span class="field-value">{{.ApplicantPostalAddress}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Telephone Number:</span>
+      <span class="field-value">{{.ApplicantTelephone}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Title:</span>
+      <div class="checkbox-group">
+        <div class="checkbox-item">
+          <span class="checkbox{{ if eq .ApplicantTitle "Mr" }} checked{{ end }}"></span>
+          <span>Mr</span>
+        </div>
+        <div class="checkbox-item">
+          <span class="checkbox{{ if eq .ApplicantTitle "Mrs" }} checked{{ end }}"></span>
+          <span>Mrs</span>
+        </div>
+        <div class="checkbox-item">
+          <span class="checkbox{{ if eq .ApplicantTitle "Miss" }} checked{{ end }}"></span>
+          <span>Miss</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2. Owner Details -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      2. Owner Details (if different from applicant)
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Surname / Company Name:</span>
+      <span class="field-value">{{.OwnerSurname}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Other Names:</span>
+      <span class="field-value">{{.OwnerOtherNames}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Postal Address:</span>
+      <span class="field-value">{{.OwnerPostalAddress}}</span>
+    </div>
+
+    <!-- 3. Property Description -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      3. Property Description
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Description (as per title deeds):</span>
+      <span class="field-value">{{.PropertyDescription}}</span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Street Address:</span>
+      <span class="field-value">{{.StreetAddress}}</span>
+    </div>
+
+    <!-- 4. Size of Property -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      4. Size of Property
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Area (m²):</span>
+      <span class="field-value">{{.PropertyArea}}</span>
+    </div>
+
+    <!-- 5. Title Deed Restrictions -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      5. Title Deed Restrictions
+    </div>
+
+    <p style="font-size: 9pt; margin-bottom: 6pt">
+      Are there any restrictions in the title deed that conflict with the
+      proposed development?
+    </p>
+    <p style="font-size: 8pt; font-style: italic; margin-bottom: 6pt">
+      (see Note 3 in this connection.)
+    </p>
+
+    <div class="checkbox-group">
+      <div class="checkbox-item">
+        <span class="checkbox"></span>
+        <span>Yes (Attach copy of title deed)</span>
+      </div>
+      <div class="checkbox-item">
+        <span class="checkbox"></span>
+        <span>No</span>
+      </div>
+    </div>
+
+    <!-- 6. Proposed Development -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      6. Proposed Development
+    </div>
+
+    <p style="font-size: 9pt; margin-bottom: 4pt">
+      Describe the development and intended use of the land/buildings:
+    </p>
+    <div class="text-area"></div>
+
+    <!-- 7. Current and Previous Use of Buildings -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      7. Current and Previous Use of Buildings
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Present Use:</span>
+      <span class="field-value"></span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Last Use (if vacant):</span>
+      <span class="field-value"></span>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Date Last Used:</span>
+      <span class="field-value"></span>
+    </div>
+
+    <!-- 8. Access Details -->
+    <div class="section-header" style="font-size: 9pt; margin-top: 12pt">
+      8. Access Details
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">Does the development involve a new or altered access?</span>
+      <div class="checkbox-group">
+        <div class="checkbox-item">
+          <span class="checkbox"></span>
+          <span>Yes</span>
+        </div>
+        <div class="checkbox-item">
+          <span class="checkbox"></span>
+          <span>No</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-row">
+      <span class="field-label">If Yes, provide details:</span>
+      <span class="field-value"></span>
+    </div>
+
+    <!-- Notes Section -->
+    <div class="note-section" style="margin-top: 20pt">
+      <p style="margin: 4pt 0">
+        <strong>Note 1:</strong> Application fees are payable in accordance with
+        the prescribed tariff.
+      </p>
+      <p style="margin: 4pt 0">
+        <strong>Note 2:</strong> Incomplete applications will not be processed.
+      </p>
+      <p style="margin: 4pt 0">
+        <strong>Note 3:</strong> Applicants must ensure that the proposed
+        development does not conflict with any restrictions in the title deed.
+      </p>
+    </div>
+
+    <div style="text-align: right; font-size: 8pt; margin-top: 15pt">
+      Page 2 of 2
+    </div>
+  </body>
+</html>

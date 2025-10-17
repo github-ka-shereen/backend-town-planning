@@ -30,4 +30,5 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/create-application", applicationController.CreateApplicationController)
 	applicationRoutes.Get("/filtered-applications", applicationController.GetFilteredApplicationsController)
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
+	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 }

@@ -34,13 +34,14 @@ type Applicant struct {
 	MiddleName    *string       `json:"middle_name"`
 	DateOfBirth   *time.Time    `json:"date_of_birth"`
 	Gender        *string       `json:"gender"`
+	MaritalStatus *string       `json:"marital_status"`
 	Occupation    *string       `json:"occupation"`
 
 	// Organisation specific fields
 	OrganisationName        *string `json:"organisation_name"`
 	TaxIdentificationNumber *string `json:"tax_identification_number"`
 
-	// Relationships - CORRECTED
+	// Relationships
 	OrganisationRepresentatives []OrganisationRepresentative `gorm:"many2many:applicant_organisation_representatives;foreignKey:ID;joinForeignKey:ApplicantID;References:ID;joinReferences:OrganisationRepresentativeID" json:"organisation_representatives"`
 	Applications                []Application                `gorm:"foreignKey:ApplicantID" json:"applications"`
 	AdditionalPhoneNumbers      []ApplicantAdditionalPhone   `gorm:"foreignKey:ApplicantID" json:"additional_phone_numbers"` // Renamed for consistency
@@ -70,7 +71,7 @@ type ApplicantDocument struct {
 	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
 	CreatedBy     string     `json:"created_by"`
 
-	// Relationships - CORRECTED
+	// Relationships
 	Document    Document     `gorm:"foreignKey:DocumentID" json:"document"`
 	Application *Application `gorm:"foreignKey:ApplicationID" json:"application"`
 	Applicant   Applicant    `gorm:"foreignKey:ApplicantID" json:"applicant"`
@@ -99,7 +100,7 @@ type OrganisationRepresentative struct {
 	WhatsAppNumber *string   `json:"whatsapp_number"`
 	Role           string    `json:"role"`
 
-	// Relationships - CORRECTED
+	// Relationships
 	Applicants []Applicant `gorm:"many2many:applicant_organisation_representatives;foreignKey:ID;joinForeignKey:OrganisationRepresentativeID;References:ID;joinReferences:ApplicantID" json:"applicants"`
 
 	CreatedBy string    `gorm:"not null" json:"created_by"`

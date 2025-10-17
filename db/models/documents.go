@@ -10,12 +10,16 @@ import (
 type DocumentType string
 
 const (
-	PDFDocument         DocumentType = "PDF"
-	ImageDocument       DocumentType = "IMAGE"
-	WordDocument        DocumentType = "WORD_DOCUMENT"
-	SpreadsheetDocument DocumentType = "SPREADSHEET"
-	CADDocument         DocumentType = "CAD_DRAWING"
-	SurveyPlanDocument  DocumentType = "SURVEY_PLAN"
+	PDFDocument                         DocumentType = "PDF"
+	ImageDocument                       DocumentType = "IMAGE"
+	WordDocument                        DocumentType = "WORD_DOCUMENT"
+	SpreadsheetDocument                 DocumentType = "SPREADSHEET"
+	CADDocument                         DocumentType = "CAD_DRAWING"
+	SurveyPlanDocument                  DocumentType = "SURVEY_PLAN"
+	GeneratedDevelopmentPermitQuotation DocumentType = "GENERATED_DEVELOPMENT_PERMIT_QUOTATION"
+	ProcessedDevelopmentPermitQuotation DocumentType = "PROCESSED_DEVELOPMENT_PERMIT_QUOTATION"
+	GeneratedTPD1Form                   DocumentType = "GENERATED_TPD1_FORM"
+	ProcessedTPD1Form                   DocumentType = "PROCESSED_TPD1_FORM"
 )
 
 // ActionType defines the type of action performed on a document
@@ -50,7 +54,7 @@ type Document struct {
 	DocumentCode *string      `gorm:"index" json:"document_code"`
 	FileName     string       `gorm:"not null" json:"file_name"`
 	DocumentType DocumentType `gorm:"type:varchar(30);not null" json:"document_type"`
-	CategoryID   uuid.UUID    `gorm:"type:uuid;not null;index" json:"category_id"` // Required category reference
+	CategoryID   *uuid.UUID   `gorm:"type:uuid" json:"category_id"` // Optional category reference
 	FileSize     int64        `gorm:"not null" json:"file_size"`
 	FilePath     string       `gorm:"not null" json:"file_path"`
 	FileHash     string       `gorm:"index" json:"file_hash"`

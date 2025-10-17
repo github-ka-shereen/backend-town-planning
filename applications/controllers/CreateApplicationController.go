@@ -2,7 +2,10 @@
 package controllers
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"town-planning-backend/config"
@@ -225,9 +228,62 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 			zap.String("pdfPath", pdfPath),
 			zap.String("applicationID", createdApplication.ID.String()))
 	}
-	
-	createdApplication.QuotationFilePath = pdfPath
-	
+
+	// Helper functions
+	getFileSize := func(path string) int64 {
+		info, err := os.Stat(path)
+		if err != nil {
+			return 0
+		}
+		return info.Size()
+	}
+
+	generateFileHash := func(path string) string {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return ""
+		}
+		hash := md5.Sum(data)
+		return hex.EncodeToString(hash[:])
+	}
+
+	description := "Development permit quotation"
+
+	// Create the document record in the database
+	quotationDocument := models.Document{
+		ID:            uuid.New(),
+		ApplicationID: &createdApplication.ID,
+		FilePath:      pdfPath,
+		FileName:      filename,
+		DocumentType:  models.GeneratedDevelopmentPermitQuotation, // Use your DocumentType constant
+		FileSize:      getFileSize(pdfPath),                       // Implement this helper
+		FileHash:      generateFileHash(pdfPath),                  // Implement this helper
+		MimeType:      "application/pdf",
+		IsPublic:      true,
+		Description:   &description, // e.g., "Development permit quotation"
+		IsMandatory:   true,
+		IsActive:      true,
+		CreatedBy:     req.CreatedBy,
+	}
+
+	// Create the document within the transaction
+	if err := tx.Create(&quotationDocument).Error; err != nil {
+		config.Logger.Error("Failed to create quotation document", zap.Error(err))
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to create quotation document",
+			"error":   err.Error(),
+		})
+	}
+
+	config.Logger.Info("Quotation document created successfully",
+		zap.String("documentID", quotationDocument.ID.String()),
+		zap.String("applicationID", createdApplication.ID.String()))
+
+	// Optional: Append to the application's Documents slice for the response
+	createdApplication.Documents = append(createdApplication.Documents, quotationDocument)
+
 	// Update the application within the transaction
 	if err := tx.Save(createdApplication).Error; err != nil {
 		config.Logger.Error("Failed to update application", zap.Error(err))

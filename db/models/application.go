@@ -140,6 +140,14 @@ type Application struct {
 	IsCollected bool    `gorm:"default:false" json:"is_collected"`
 	CollectedBy *string `json:"collected_by"`
 
+	// Document verification flags
+	ScannedReceiptProvided                   bool `gorm:"default:false" json:"scanned_receipt_provided"`
+	ScannedInitialPlanProvided               bool `gorm:"default:false" json:"scanned_initial_plan_provided"`
+	ScannedTPD1FormProvided                  bool `gorm:"default:false" json:"scanned_tpd1_form_provided"`
+	QuotationProvided                        bool `gorm:"default:false" json:"quotation_provided"`
+	StructuralEngineeringCertificateProvided bool `gorm:"default:false" json:"structural_engineering_certificate_provided"`
+	RingBeamCertificateProvided              bool `gorm:"default:false" json:"ring_beam_certificate_provided"`
+
 	// Property details
 	PropertyTypeID *uuid.UUID `gorm:"type:uuid;index" json:"property_type_id"`
 	StandID        *string    `gorm:"index" json:"stand_id"`
@@ -150,15 +158,13 @@ type Application struct {
 	TariffID  *uuid.UUID `gorm:"type:uuid;index" json:"tariff_id"`
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
-	QuotationFilePath string `gorm:"type:text" json:"quotation_file_path"`
-
 	// Relationships
 	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
 	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
 	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
 	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
 	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
-	Payments  []Payment  `gorm:"foreignKey:ApplicationID" json:"payments,omitempty"` 
+	Payments  []Payment  `gorm:"foreignKey:ApplicationID" json:"payments,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`

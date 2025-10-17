@@ -70,7 +70,7 @@ func GenerateDevelopmentPermitQuotation(application models.Application, filename
 // prepareQuotationData prepares the data structure for the quotation template using existing application data
 func prepareQuotationData(application models.Application) (QuotationData, error) {
 	// Load logo
-	logoBase64, err := loadVictoriaFallsLogo()
+	logoBase64, err := loadLogo()
 	if err != nil {
 		config.Logger.Warn("Failed to load logo, using placeholder", zap.Error(err))
 		logoBase64 = createVictoriaFallsPlaceholderLogo()
@@ -151,8 +151,8 @@ func generateHTMLQuotation(data QuotationData) (string, error) {
 	return buf.String(), nil
 }
 
-// loadVictoriaFallsLogo loads the Victoria Falls municipality logo
-func loadVictoriaFallsLogo() (string, error) {
+// logo
+func loadLogo() (string, error) {
 	logoPaths := []string{
 		"./templates/logo/redcliff_logo.jpg",
 		"./templates/logo/redcliff_logo.png",
