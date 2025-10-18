@@ -40,6 +40,7 @@ func (r *applicationRepository) GetApplicationById(applicationID string) (*model
         Preload("Tariff").
         Preload("Tariff.DevelopmentCategory").
         Preload("VATRate").
+		Preload("Documents").
 		Preload("Payment").
         Where("id = ?", applicationID).
         First(&application).Error; err != nil {

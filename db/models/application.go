@@ -141,10 +141,10 @@ type Application struct {
 	CollectedBy *string `json:"collected_by"`
 
 	// Document verification flags
-	ScannedReceiptProvided                   bool `gorm:"default:false" json:"scanned_receipt_provided"`
-	ScannedInitialPlanProvided               bool `gorm:"default:false" json:"scanned_initial_plan_provided"`
-	ScannedTPD1FormProvided                  bool `gorm:"default:false" json:"scanned_tpd1_form_provided"`
-	QuotationProvided                        bool `gorm:"default:false" json:"quotation_provided"`
+	ProcessedReceiptProvided                 bool `gorm:"default:false" json:"processed_receipt_provided"`
+	InitialPlanProvided                      bool `gorm:"default:false" json:"initial_plan_provided"`
+	ProcessedTPD1FormProvided                bool `gorm:"default:false" json:"processed_tpd1_form_provided"`
+	ProcessedQuotationProvided               bool `gorm:"default:false" json:"processed_quotation_provided"`
 	StructuralEngineeringCertificateProvided bool `gorm:"default:false" json:"structural_engineering_certificate_provided"`
 	RingBeamCertificateProvided              bool `gorm:"default:false" json:"ring_beam_certificate_provided"`
 

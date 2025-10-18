@@ -10,19 +10,20 @@ import (
 type DocumentType string
 
 const (
-	PDFDocument                         DocumentType = "PDF"
-	ImageDocument                       DocumentType = "IMAGE"
-	WordDocument                        DocumentType = "WORD_DOCUMENT"
-	SpreadsheetDocument                 DocumentType = "SPREADSHEET"
-	CADDocument                         DocumentType = "CAD_DRAWING"
-	SurveyPlanDocument                  DocumentType = "SURVEY_PLAN"
-	GeneratedDevelopmentPermitQuotation DocumentType = "GENERATED_DEVELOPMENT_PERMIT_QUOTATION"
-	ProcessedDevelopmentPermitQuotation DocumentType = "PROCESSED_DEVELOPMENT_PERMIT_QUOTATION"
-	GeneratedTPD1Form                   DocumentType = "GENERATED_TPD1_FORM"
-	ProcessedTPD1Form                   DocumentType = "PROCESSED_TPD1_FORM"
-	InitialPlanDocument                 DocumentType = "INITIAL_PLAN"
+	PDFDocument                              DocumentType = "PDF"
+	ImageDocument                            DocumentType = "IMAGE"
+	WordDocument                             DocumentType = "WORD_DOCUMENT"
+	SpreadsheetDocument                      DocumentType = "SPREADSHEET"
+	CADDocument                              DocumentType = "CAD_DRAWING"
+	SurveyPlanDocument                       DocumentType = "SURVEY_PLAN"
+	GeneratedDevelopmentPermitQuotation      DocumentType = "GENERATED_DEVELOPMENT_PERMIT_QUOTATION"
+	ProcessedDevelopmentPermitQuotation      DocumentType = "PROCESSED_DEVELOPMENT_PERMIT_QUOTATION"
+	GeneratedTPD1Form                        DocumentType = "GENERATED_TPD1_FORM"
+	ProcessedTPD1Form                        DocumentType = "PROCESSED_TPD1_FORM"
+	ProcessedReceipt                         DocumentType = "PROCESSED_RECEIPT"
+	InitialPlanDocument                      DocumentType = "INITIAL_PLAN"
 	StructuralEngineeringCertificateDocument DocumentType = "STRUCTURAL_ENGINEERING_CERTIFICATE"
-	RingBeamCertificateDocument         DocumentType = "RING_BEAM_CERTIFICATE"
+	RingBeamCertificateDocument              DocumentType = "RING_BEAM_CERTIFICATE"
 )
 
 // ActionType defines the type of action performed on a document

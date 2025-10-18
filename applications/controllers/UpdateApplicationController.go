@@ -179,7 +179,7 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 	}{
 		{
 			formField:    "scanned_receipt",
-			documentType: models.ProcessedTPD1Form,
+			documentType: models.ProcessedReceipt,
 			flagField:    "ScannedReceiptProvided",
 			description:  "Scanned receipt document",
 			isMandatory:  true,
@@ -472,26 +472,26 @@ func (ac *ApplicationController) createPaymentRecord(
 	return &payment, nil
 }
 
-// Helper function to convert CamelCase to snake_case
-func toSnakeCase(str string) string {
-	var result strings.Builder
-	for i, char := range str {
-		if i > 0 && 'A' <= char && char <= 'Z' {
-			result.WriteByte('_')
-		}
-		result.WriteRune(char)
-	}
-	return strings.ToLower(result.String())
-}
+// // Helper function to convert CamelCase to snake_case
+// func toSnakeCase(str string) string {
+// 	var result strings.Builder
+// 	for i, char := range str {
+// 		if i > 0 && 'A' <= char && char <= 'Z' {
+// 			result.WriteByte('_')
+// 		}
+// 		result.WriteRune(char)
+// 	}
+// 	return strings.ToLower(result.String())
+// }
 
 // Helper function to map flag fields to actual database column names
 func getDatabaseColumnName(flagField string) string {
 	// Direct mapping to avoid any conversion issues
 	fieldMap := map[string]string{
-		"ScannedReceiptProvided":                   "scanned_receipt_provided",
-		"ScannedTPD1FormProvided":                  "scanned_tpd1_form_provided",
-		"QuotationProvided":                        "quotation_provided",
-		"ScannedInitialPlanProvided":               "scanned_initial_plan_provided",
+		"ScannedReceiptProvided":                   "processed_receipt_provided",
+		"ScannedTPD1FormProvided":                  "processed_tpd1_form_provided",
+		"QuotationProvided":                        "processed_quotation_provided",
+		"ScannedInitialPlanProvided":               "initial_plan_provided",
 		"StructuralEngineeringCertificateProvided": "structural_engineering_certificate_provided",
 		"RingBeamCertificateProvided":              "ring_beam_certificate_provided",
 	}
