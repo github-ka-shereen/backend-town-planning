@@ -12,17 +12,17 @@ import (
 type ApplicationStatus string
 
 const (
-    SubmittedApplication   ApplicationStatus = "SUBMITTED"
-    UnderReviewApplication ApplicationStatus = "UNDER_REVIEW" // When in department review
-    PendingApprovalApplication ApplicationStatus = "PENDING_APPROVAL" // Specific to your frontend
-    ApprovedApplication    ApplicationStatus = "APPROVED"
-    RejectedApplication    ApplicationStatus = "REJECTED"
-    CollectedApplication   ApplicationStatus = "COLLECTED"
-    ExpiredApplication     ApplicationStatus = "EXPIRED"
-    // Add these for better workflow tracking
-    DepartmentReviewApplication ApplicationStatus = "DEPARTMENT_REVIEW"
-    FinalReviewApplication      ApplicationStatus = "FINAL_REVIEW"
-    ReadyForCollectionApplication ApplicationStatus = "READY_FOR_COLLECTION"
+	SubmittedApplication       ApplicationStatus = "SUBMITTED"
+	UnderReviewApplication     ApplicationStatus = "UNDER_REVIEW"     // When in department review
+	PendingApprovalApplication ApplicationStatus = "PENDING_APPROVAL" // Specific to your frontend
+	ApprovedApplication        ApplicationStatus = "APPROVED"
+	RejectedApplication        ApplicationStatus = "REJECTED"
+	CollectedApplication       ApplicationStatus = "COLLECTED"
+	ExpiredApplication         ApplicationStatus = "EXPIRED"
+	// Add these for better workflow tracking
+	DepartmentReviewApplication   ApplicationStatus = "DEPARTMENT_REVIEW"
+	FinalReviewApplication        ApplicationStatus = "FINAL_REVIEW"
+	ReadyForCollectionApplication ApplicationStatus = "READY_FOR_COLLECTION"
 )
 
 type PermitStatus string
@@ -33,7 +33,6 @@ const (
 	PermitRevoked   PermitStatus = "REVOKED"
 	PermitSuspended PermitStatus = "SUSPENDED"
 )
-
 
 // DevelopmentCategory model for dynamic development categories
 type DevelopmentCategory struct {
@@ -116,12 +115,14 @@ type VATRate struct {
 }
 
 type Application struct {
-	ID                   uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	PlanNumber           string    `gorm:"unique;not null;index" json:"plan_number"`
-	PermitNumber         string    `gorm:"unique;not null;index" json:"permit_number"`
-	ArchitectFullName    *string   `json:"architect_full_name"`
-	ArchitectEmail       *string   `json:"architect_email"`
-	ArchitectPhoneNumber *string   `json:"architect_phone_number"`
+	ID           uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	PlanNumber   string    `gorm:"unique;not null;index" json:"plan_number"`
+	PermitNumber string    `gorm:"unique;index" json:"permit_number"` // Generated after final approval
+
+	// Architect details
+	ArchitectFullName    *string `json:"architect_full_name"`
+	ArchitectEmail       *string `json:"architect_email"`
+	ArchitectPhoneNumber *string `json:"architect_phone_number"`
 
 	// Planning details
 	PlanArea *decimal.Decimal `gorm:"type:decimal(15,2)" json:"plan_area"`
@@ -132,20 +133,23 @@ type Application struct {
 	TotalCost       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"total_cost"`
 	EstimatedCost   *decimal.Decimal `gorm:"type:decimal(15,2)" json:"estimated_cost"`
 
-	// Payment tracking
-	PaymentStatus PaymentStatus `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
+	// Payment and document prerequisites for approval group review
+	PaymentStatus        PaymentStatus `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
+	AllDocumentsProvided bool          `gorm:"default:false;index" json:"all_documents_provided"`
+	ReadyForReview       bool          `gorm:"default:false;index" json:"ready_for_review"` // Payment complete + docs provided
 
-	// Status and dates - ENHANCED FOR WORKFLOW
-	Status         ApplicationStatus `gorm:"type:varchar(30);default:'SUBMITTED';index" json:"status"`
+	// Application workflow status
+	Status         ApplicationStatus `gorm:"type:varchar(40);default:'SUBMITTED';index" json:"status"`
 	SubmissionDate time.Time         `gorm:"not null" json:"submission_date"`
-	ApprovalDate   *time.Time        `json:"approval_date"`
-	RejectionDate  *time.Time        `json:"rejection_date"`
-	CollectionDate *time.Time        `json:"collection_date"`
-	
-	// Approval workflow tracking
-	ApprovalProgress  int        `gorm:"default:0" json:"approval_progress"` // Percentage
-	LastApprovalDate  *time.Time `json:"last_approval_date"`
-	ApprovalDeadline  *time.Time `json:"approval_deadline"` // SLA tracking
+
+	// Workflow milestone dates
+	PaymentCompletedAt   *time.Time `json:"payment_completed_at"`
+	DocumentsCompletedAt *time.Time `json:"documents_completed_at"`
+	ReviewStartedAt      *time.Time `json:"review_started_at"`
+	ReviewCompletedAt    *time.Time `json:"review_completed_at"`
+	FinalApprovalDate    *time.Time `json:"final_approval_date"`
+	RejectionDate        *time.Time `json:"rejection_date"`
+	CollectionDate       *time.Time `json:"collection_date"`
 
 	// Collection tracking
 	IsCollected bool    `gorm:"default:false" json:"is_collected"`
@@ -164,20 +168,30 @@ type Application struct {
 	StandID        *uuid.UUID `gorm:"type:uuid;index" json:"stand_id"`
 	ApplicantID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
 
-	// Reference to the actual rates used for this application
+	// Tariff references
 	TariffID  *uuid.UUID `gorm:"type:uuid;index" json:"tariff_id"`
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
-	// Relationships - ENHANCED WITH APPROVAL TRACKING
-	Applicant Applicant               `gorm:"foreignKey:ApplicantID" json:"applicant"`
-	Tariff    *Tariff                 `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
-	VATRate   *VATRate                `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
-	Stand     *Stand                  `gorm:"foreignKey:StandID" json:"stand,omitempty"`
-	Documents []Document              `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
-	Comments  []Comment               `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"` // ALL communication
-	Payment   Payment                 `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
-	Approvals []ApplicationApproval   `gorm:"foreignKey:ApplicationID" json:"approvals,omitempty"` // Department decisions
-	Workflow  *ApplicationWorkflow    `gorm:"foreignKey:ApplicationID" json:"workflow,omitempty"`
+	// Approval group assignment (can be null if using global group)
+	AssignedGroupID *uuid.UUID `gorm:"type:uuid;index" json:"assigned_group_id"`
+
+	// Final approver assignment
+	FinalApproverID *uuid.UUID `gorm:"type:uuid;index" json:"final_approver_id"`
+
+	// Relationships
+	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
+	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
+	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
+	Stand     *Stand     `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
+	Payment   Payment    `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
+
+	// New approval group relationships
+	GroupAssignments []ApplicationGroupAssignment `gorm:"foreignKey:ApplicationID" json:"group_assignments,omitempty"`
+	Issues           []ApplicationIssue           `gorm:"foreignKey:ApplicationID" json:"issues,omitempty"`
+	Comments         []Comment                    `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
+	FinalApproval    *FinalApproval               `gorm:"foreignKey:ApplicationID" json:"final_approval,omitempty"`
+	FinalApprover    *User                        `gorm:"foreignKey:FinalApproverID" json:"final_approver,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -186,9 +200,6 @@ type Application struct {
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
-
-
-
 
 // Application
 func (a *Application) BeforeCreate(tx *gorm.DB) (err error) {
