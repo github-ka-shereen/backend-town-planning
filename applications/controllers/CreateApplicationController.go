@@ -25,7 +25,7 @@ type CreateApplicationRequest struct {
 	ArchitectFullName    *string         `json:"architect_full_name"`
 	ArchitectEmail       *string         `json:"architect_email"`
 	ArchitectPhoneNumber *string         `json:"architect_phone_number"`
-	StandID              string          `json:"stand_id" validate:"required"`
+	StandID              uuid.UUID       `json:"stand_id" validate:"required"`
 	ApplicantID          string          `json:"applicant_id" validate:"required,uuid4"`
 	TariffID             string          `json:"tariff_id" validate:"required,uuid4"`
 	PropertyTypeID       string          `json:"property_type_id" validate:"required,uuid4"`

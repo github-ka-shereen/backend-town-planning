@@ -12,12 +12,17 @@ import (
 type ApplicationStatus string
 
 const (
-	SubmittedApplication   ApplicationStatus = "SUBMITTED"
-	UnderReviewApplication ApplicationStatus = "UNDER_REVIEW"
-	ApprovedApplication    ApplicationStatus = "APPROVED"
-	RejectedApplication    ApplicationStatus = "REJECTED"
-	CollectedApplication   ApplicationStatus = "COLLECTED"
-	ExpiredApplication     ApplicationStatus = "EXPIRED"
+    SubmittedApplication   ApplicationStatus = "SUBMITTED"
+    UnderReviewApplication ApplicationStatus = "UNDER_REVIEW" // When in department review
+    PendingApprovalApplication ApplicationStatus = "PENDING_APPROVAL" // Specific to your frontend
+    ApprovedApplication    ApplicationStatus = "APPROVED"
+    RejectedApplication    ApplicationStatus = "REJECTED"
+    CollectedApplication   ApplicationStatus = "COLLECTED"
+    ExpiredApplication     ApplicationStatus = "EXPIRED"
+    // Add these for better workflow tracking
+    DepartmentReviewApplication ApplicationStatus = "DEPARTMENT_REVIEW"
+    FinalReviewApplication      ApplicationStatus = "FINAL_REVIEW"
+    ReadyForCollectionApplication ApplicationStatus = "READY_FOR_COLLECTION"
 )
 
 type PermitStatus string
@@ -28,6 +33,7 @@ const (
 	PermitRevoked   PermitStatus = "REVOKED"
 	PermitSuspended PermitStatus = "SUSPENDED"
 )
+
 
 // DevelopmentCategory model for dynamic development categories
 type DevelopmentCategory struct {
@@ -126,15 +132,20 @@ type Application struct {
 	TotalCost       *decimal.Decimal `gorm:"type:decimal(15,2)" json:"total_cost"`
 	EstimatedCost   *decimal.Decimal `gorm:"type:decimal(15,2)" json:"estimated_cost"`
 
-	// Payment tracking (overall, not individual receipts)
+	// Payment tracking
 	PaymentStatus PaymentStatus `gorm:"type:varchar(20);default:'PENDING'" json:"payment_status"`
 
-	// Status and dates
-	Status         ApplicationStatus `gorm:"type:varchar(20);default:'SUBMITTED';index" json:"status"`
+	// Status and dates - ENHANCED FOR WORKFLOW
+	Status         ApplicationStatus `gorm:"type:varchar(30);default:'SUBMITTED';index" json:"status"`
 	SubmissionDate time.Time         `gorm:"not null" json:"submission_date"`
 	ApprovalDate   *time.Time        `json:"approval_date"`
 	RejectionDate  *time.Time        `json:"rejection_date"`
 	CollectionDate *time.Time        `json:"collection_date"`
+	
+	// Approval workflow tracking
+	ApprovalProgress  int        `gorm:"default:0" json:"approval_progress"` // Percentage
+	LastApprovalDate  *time.Time `json:"last_approval_date"`
+	ApprovalDeadline  *time.Time `json:"approval_deadline"` // SLA tracking
 
 	// Collection tracking
 	IsCollected bool    `gorm:"default:false" json:"is_collected"`
@@ -150,21 +161,23 @@ type Application struct {
 
 	// Property details
 	PropertyTypeID *uuid.UUID `gorm:"type:uuid;index" json:"property_type_id"`
-	StandID        *string    `gorm:"index" json:"stand_id"`
-	Stand          *Stand     `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	StandID        *uuid.UUID `gorm:"type:uuid;index" json:"stand_id"`
 	ApplicantID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
 
 	// Reference to the actual rates used for this application
 	TariffID  *uuid.UUID `gorm:"type:uuid;index" json:"tariff_id"`
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
-	// Relationships
-	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
-	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
-	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
-	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
-	Comments  []Comment  `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"`
-	Payment   Payment    `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
+	// Relationships - ENHANCED WITH APPROVAL TRACKING
+	Applicant Applicant               `gorm:"foreignKey:ApplicantID" json:"applicant"`
+	Tariff    *Tariff                 `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
+	VATRate   *VATRate                `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
+	Stand     *Stand                  `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	Documents []Document              `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
+	Comments  []Comment               `gorm:"foreignKey:ApplicationID" json:"comments,omitempty"` // ALL communication
+	Payment   Payment                 `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
+	Approvals []ApplicationApproval   `gorm:"foreignKey:ApplicationID" json:"approvals,omitempty"` // Department decisions
+	Workflow  *ApplicationWorkflow    `gorm:"foreignKey:ApplicationID" json:"workflow,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -174,33 +187,8 @@ type Application struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// Comment model remains the same
-type Comment struct {
-	ID            uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicationID uuid.UUID  `gorm:"type:uuid;not null;index" json:"application_id"`
-	Department    *string    `gorm:"type:varchar(30)" json:"department"`
-	UserID        *uuid.UUID `gorm:"type:uuid;index" json:"user_id"`
-	Subject       *string    `json:"subject"`
-	Content       string     `gorm:"type:text;not null" json:"content"`
-	IsInternal    bool       `gorm:"default:false" json:"is_internal"`
-	IsResolved    bool       `gorm:"default:false" json:"is_resolved"`
-	IsActive      bool       `gorm:"default:true" json:"is_active"`
-	ParentID      *uuid.UUID `gorm:"type:uuid;index" json:"parent_id"`
-	DocumentID    *uuid.UUID `gorm:"type:uuid;index" json:"document_id"`
 
-	// Relationships
-	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
-	Parent      *Comment    `gorm:"foreignKey:ParentID" json:"parent,omitempty"`
-	Replies     []Comment   `gorm:"foreignKey:ParentID" json:"replies,omitempty"`
-	User        User        `gorm:"foreignKey:UserID" json:"user"`
-	Document    Document    `gorm:"foreignKey:DocumentID" json:"document"`
 
-	// Audit fields
-	CreatedBy string         `gorm:"not null" json:"created_by"`
-	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-}
 
 // Application
 func (a *Application) BeforeCreate(tx *gorm.DB) (err error) {

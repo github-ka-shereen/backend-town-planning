@@ -91,8 +91,9 @@ func (RolePermission) TableName() string {
 type Department struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	Name        string    `gorm:"type:varchar(100);uniqueIndex;not null" json:"name" validate:"required,min=2,max=100"`
-	Description *string    `gorm:"type:varchar(500)" json:"description" validate:"max=500"`
+	Description *string   `gorm:"type:varchar(500)" json:"description" validate:"max=500"`
 	IsActive    bool      `gorm:"default:true;index:idx_department_active" json:"is_active"`
+	IsSystem    bool      `gorm:"default:false" json:"is_system"`
 
 	// Contact information with proper validation
 	Email          *string `gorm:"type:varchar(255)" json:"email" validate:"omitempty,email"`
