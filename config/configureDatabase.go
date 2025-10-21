@@ -59,8 +59,17 @@ var allModels = []interface{}{
 	&models.DocumentAuditLog{},
 	&models.DocumentVersion{},
 
-	// 8. Other models that reference the above
+	// 8. Approval Workflow Models (ADD THESE NEW MODELS)
+	&models.ApprovalGroup{},
+	&models.ApprovalGroupMember{},
+	&models.ApplicationGroupAssignment{},
+	&models.MemberApprovalDecision{},
+	&models.ApplicationIssue{},
+	&models.FinalApproverAssignment{},
+	&models.FinalApproval{},
 	&models.Comment{},
+
+	// 9. Other models that reference the above
 	&models.ApplicantDocument{},
 	&models.AllStandOwners{},
 	&models.EmailLog{},

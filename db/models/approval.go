@@ -63,15 +63,15 @@ type ApprovalGroup struct {
 	IsActive    bool              `gorm:"default:true;index" json:"is_active"`
 
 	// Workflow configuration
-	RequiresAllApprovals bool `gorm:"default:false" json:"requires_all_approvals"`
+	RequiresAllApprovals bool `gorm:"default:true" json:"requires_all_approvals"`
 	MinimumApprovals     int  `gorm:"default:1" json:"minimum_approvals"`
-	
+
 	// Auto-assignment configuration
-	AutoAssignBackups bool `gorm:"default:true" json:"auto_assign_backups"` // Auto-use backups when primary unavailable
+	AutoAssignBackups bool `gorm:"default:false" json:"auto_assign_backups"` // Auto-use backups when primary unavailable
 
 	// Relationships
-	Members     []ApprovalGroupMember        `gorm:"foreignKey:GroupID" json:"members,omitempty"`
-	Assignments []ApplicationGroupAssignment `gorm:"foreignKey:GroupID" json:"assignments,omitempty"`
+	Members     []ApprovalGroupMember        `gorm:"foreignKey:ApprovalGroupID" json:"members,omitempty"`
+	Assignments []ApplicationGroupAssignment `gorm:"foreignKey:ApprovalGroupID" json:"assignments,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -83,9 +83,9 @@ type ApprovalGroup struct {
 
 // ApprovalGroupMember represents individual members of an approval group
 type ApprovalGroupMember struct {
-	ID      uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	GroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"group_id"`
-	UserID  uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	ID              uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ApprovalGroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"approval_group_id"`
+	UserID          uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
 
 	// Member role and configuration
 	Role           MemberRole `gorm:"type:varchar(20);default:'PRIMARY'" json:"role"`
@@ -104,12 +104,9 @@ type ApprovalGroupMember struct {
 	// Backup priority (lower number = higher priority)
 	BackupPriority int `gorm:"default:0" json:"backup_priority"`
 
-	// Workload limits
-	MaxConcurrentReviews int `gorm:"default:10" json:"max_concurrent_reviews"`
-
 	// Relationships
-	Group ApprovalGroup `gorm:"foreignKey:GroupID" json:"group"`
-	User  User          `gorm:"foreignKey:UserID" json:"user"`
+	ApprovalGroup ApprovalGroup `gorm:"foreignKey:ApprovalGroupID" json:"approval_group"`
+	User          User          `gorm:"foreignKey:UserID" json:"user"`
 
 	// Audit fields
 	AddedBy      string         `gorm:"not null" json:"added_by"`
@@ -123,9 +120,9 @@ type ApprovalGroupMember struct {
 
 // ApplicationGroupAssignment links applications to approval groups
 type ApplicationGroupAssignment struct {
-	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicationID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
-	GroupID       uuid.UUID `gorm:"type:uuid;not null;index" json:"group_id"`
+	ID              uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ApplicationID   uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
+	ApprovalGroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"approval_group_id"`
 
 	// Assignment status
 	IsActive    bool       `gorm:"default:true;index" json:"is_active"`
@@ -146,7 +143,7 @@ type ApplicationGroupAssignment struct {
 
 	// Relationships
 	Application Application              `gorm:"foreignKey:ApplicationID" json:"application"`
-	Group       ApprovalGroup            `gorm:"foreignKey:GroupID" json:"group"`
+	Group       ApprovalGroup            `gorm:"foreignKey:ApprovalGroupID" json:"group"`
 	Decisions   []MemberApprovalDecision `gorm:"foreignKey:AssignmentID" json:"decisions,omitempty"`
 
 	// Audit fields
@@ -205,8 +202,8 @@ type ApplicationIssue struct {
 	AssignmentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"assignment_id"`
 
 	// Who raised the issue
-	RaisedByDecisionID uuid.UUID `gorm:"type:uuid;not null;index" json:"raised_by_decision_id"`
-	RaisedByUserID     uuid.UUID `gorm:"type:uuid;not null;index" json:"raised_by_user_id"`
+	RaisedByDecisionID uuid.UUID  `gorm:"type:uuid;not null;index" json:"raised_by_decision_id"`
+	RaisedByUserID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"raised_by_user_id"`
 	RaisedByRole       MemberRole `gorm:"type:varchar(20)" json:"raised_by_role"` // Role when issue was raised
 
 	// Issue details
@@ -235,6 +232,24 @@ type ApplicationIssue struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
+// FinalApproverAssignment tracks final approvers for approval groups
+type FinalApproverAssignment struct {
+	ID              uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ApprovalGroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"approval_group_id"`
+	UserID          uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	AssignedBy      string    `gorm:"not null" json:"assigned_by"`
+	IsActive        bool      `gorm:"default:true;index" json:"is_active"`
+
+	// Relationships
+	ApprovalGroup ApprovalGroup `gorm:"foreignKey:ApprovalGroupID" json:"approval_group"`
+	User          User          `gorm:"foreignKey:UserID" json:"user"`
+
+	// Audit fields
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
 // FinalApproval represents the final decision by the designated approver
 type FinalApproval struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
@@ -244,8 +259,7 @@ type FinalApproval struct {
 	// Final decision
 	Decision   ApplicationStatus `gorm:"type:varchar(30);not null" json:"decision"`
 	DecisionAt time.Time         `gorm:"not null" json:"decision_at"`
-	Comments   *string           `gorm:"type:text" json:"comments"`
-	Signature  string            `gorm:"not null" json:"signature"`
+	Comment    *string           `gorm:"type:text" json:"comment"`
 
 	// Relationships
 	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
@@ -334,4 +348,20 @@ func (fa *FinalApproval) BeforeCreate(tx *gorm.DB) error {
 		fa.ID = uuid.New()
 	}
 	return nil
+}
+
+// ADDED: BeforeCreate hook for FinalApproverAssignment
+func (faa *FinalApproverAssignment) BeforeCreate(tx *gorm.DB) error {
+	if faa.ID == uuid.Nil {
+		faa.ID = uuid.New()
+	}
+	return nil
+}
+
+// Comment
+func (c *Comment) BeforeCreate(tx *gorm.DB) (err error) {
+	if c.ID == uuid.Nil {
+		c.ID = uuid.New()
+	}
+	return
 }

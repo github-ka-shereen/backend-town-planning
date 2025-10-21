@@ -32,4 +32,5 @@ func ApplicationRouterInit(
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
 	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 	applicationRoutes.Patch("/update-application/:id", applicationController.UpdateApplicationController)
+	applicationRoutes.Post("/approval-groups/create-with-members", applicationController.CreateApprovalGroupWithMembers)
 }

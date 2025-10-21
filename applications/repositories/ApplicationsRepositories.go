@@ -23,6 +23,10 @@ type ApplicationRepository interface {
 	GetTariffByID(tariffID string) (*models.Tariff, error)
 	GetFilteredApplications(limit, offset int, filters map[string]string) ([]models.Application, int64, error)
 	GetApplicationById(applicationID string) (*models.Application, error)
+	CreateApprovalGroup(tx *gorm.DB, group *models.ApprovalGroup) (*models.ApprovalGroup, error)
+	GetApprovalGroupWithMembers(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
+	GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error)
+	GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 }
 
 type applicationRepository struct {
@@ -31,6 +35,69 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
+}
+
+// CreateApprovalGroup creates a new approval group with its members
+func (r *applicationRepository) CreateApprovalGroup(tx *gorm.DB, group *models.ApprovalGroup) (*models.ApprovalGroup, error) {
+	// Use transaction to ensure atomicity
+	if err := tx.Create(group).Error; err != nil {
+		return nil, err
+	}
+	return group, nil
+}
+
+// GetApprovalGroupWithMembers fetches an approval group with all its active members and their user details
+func (r *applicationRepository) GetApprovalGroupWithMembers(db *gorm.DB, groupID string) (*models.ApprovalGroup, error) {
+	var group models.ApprovalGroup
+	
+	err := db.
+		Preload("Members", "is_active = ?", true).
+		Preload("Members.User").
+		Preload("Members.User.Department").
+		Preload("Members.User.Role").
+		Where("id = ?", groupID).
+		First(&group).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &group, nil
+}
+
+// GetApprovalGroups fetches all approval groups with basic member info
+func (r *applicationRepository) GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error) {
+	var groups []models.ApprovalGroup
+	
+	err := db.
+		Preload("Members", "is_active = ?", true).
+		Preload("Members.User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id", "first_name", "last_name", "email")
+		}).
+		Where("is_active = ?", true).
+		Order("created_at DESC").
+		Find(&groups).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return groups, nil
+}
+
+// GetApprovalGroupByID fetches a single approval group by ID without members
+func (r *applicationRepository) GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error) {
+	var group models.ApprovalGroup
+	
+	err := db.
+		Where("id = ?", groupID).
+		First(&group).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &group, nil
 }
 
 func (r *applicationRepository) GetApplicationById(applicationID string) (*models.Application, error) {

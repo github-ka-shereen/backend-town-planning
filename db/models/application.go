@@ -8,23 +8,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ApplicationStatus defines the current state of an application.
-type ApplicationStatus string
-
-const (
-	SubmittedApplication       ApplicationStatus = "SUBMITTED"
-	UnderReviewApplication     ApplicationStatus = "UNDER_REVIEW"     // When in department review
-	PendingApprovalApplication ApplicationStatus = "PENDING_APPROVAL" // Specific to your frontend
-	ApprovedApplication        ApplicationStatus = "APPROVED"
-	RejectedApplication        ApplicationStatus = "REJECTED"
-	CollectedApplication       ApplicationStatus = "COLLECTED"
-	ExpiredApplication         ApplicationStatus = "EXPIRED"
-	// Add these for better workflow tracking
-	DepartmentReviewApplication   ApplicationStatus = "DEPARTMENT_REVIEW"
-	FinalReviewApplication        ApplicationStatus = "FINAL_REVIEW"
-	ReadyForCollectionApplication ApplicationStatus = "READY_FOR_COLLECTION"
-)
-
 type PermitStatus string
 
 const (
@@ -32,6 +15,22 @@ const (
 	PermitExpired   PermitStatus = "EXPIRED"
 	PermitRevoked   PermitStatus = "REVOKED"
 	PermitSuspended PermitStatus = "SUSPENDED"
+)
+
+// ApplicationStatus defines the current state of an application (ADDED THIS)
+type ApplicationStatus string
+
+const (
+	SubmittedApplication          ApplicationStatus = "SUBMITTED"
+	UnderReviewApplication        ApplicationStatus = "UNDER_REVIEW"
+	PendingApprovalApplication    ApplicationStatus = "PENDING_APPROVAL"
+	ApprovedApplication           ApplicationStatus = "APPROVED"
+	RejectedApplication           ApplicationStatus = "REJECTED"
+	CollectedApplication          ApplicationStatus = "COLLECTED"
+	ExpiredApplication            ApplicationStatus = "EXPIRED"
+	DepartmentReviewApplication   ApplicationStatus = "DEPARTMENT_REVIEW"
+	FinalReviewApplication        ApplicationStatus = "FINAL_REVIEW"
+	ReadyForCollectionApplication ApplicationStatus = "READY_FOR_COLLECTION"
 )
 
 // DevelopmentCategory model for dynamic development categories
@@ -205,14 +204,6 @@ type Application struct {
 func (a *Application) BeforeCreate(tx *gorm.DB) (err error) {
 	if a.ID == uuid.Nil {
 		a.ID = uuid.New()
-	}
-	return
-}
-
-// Comment
-func (c *Comment) BeforeCreate(tx *gorm.DB) (err error) {
-	if c.ID == uuid.Nil {
-		c.ID = uuid.New()
 	}
 	return
 }
