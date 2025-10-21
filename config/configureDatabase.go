@@ -65,7 +65,6 @@ var allModels = []interface{}{
 	&models.ApplicationGroupAssignment{},
 	&models.MemberApprovalDecision{},
 	&models.ApplicationIssue{},
-	&models.FinalApproverAssignment{},
 	&models.FinalApproval{},
 	&models.Comment{},
 
@@ -77,7 +76,6 @@ var allModels = []interface{}{
 	&models.BulkUploadErrorStands{},
 	&models.BulkStandUploadError{},
 }
-
 
 func ConfigureDatabase() *gorm.DB {
 	host := GetEnv("DB_HOST")
@@ -125,7 +123,6 @@ func ConfigureDatabase() *gorm.DB {
 
 	// ===== END Drop all tables =====
 
-
 	// ===== Drop specific tables =====
 
 	// If you need to drop specific tables in a particular order (like join tables first),
@@ -136,14 +133,25 @@ func ConfigureDatabase() *gorm.DB {
 	// 	log.Printf("Failed to drop stand_swap_owners join table: %v", err)
 	// }
 
-	// // Then drop other specific tables
+
+	// // // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"applications",
+	// 	"final_approver_assignments",
+	// 	"final_approvals",
+	// 	"member_approval_decisions",
+	// 	"application_issues",
+	// 	"application_group_assignments",
+	// 	"approval_group_members",
+	// 	"approval_groups",
+	// 	// Also drop any comments that might be linked to decisions/issues
+	// 	"comments",
 	// }
 
 	// for _, table := range specificTablesToDrop {
 	// 	if err := db.Migrator().DropTable(table); err != nil {
 	// 		log.Printf("Failed to drop table %s: %v", table, err)
+	// 	} else {
+	// 		log.Printf("Successfully dropped table: %s", table)
 	// 	}
 	// }
 

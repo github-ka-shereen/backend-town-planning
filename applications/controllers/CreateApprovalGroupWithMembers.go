@@ -20,7 +20,6 @@ type CreateApprovalGroupRequest struct {
 	IsActive             bool                         `json:"is_active"`
 	CreatedBy            string                       `json:"created_by"`
 	Members              []ApprovalGroupMemberRequest `json:"members"`
-	FinalApprover        FinalApproverRequest         `json:"final_approver"`
 }
 
 type ApprovalGroupMemberRequest struct {
@@ -34,11 +33,8 @@ type ApprovalGroupMemberRequest struct {
 	AvailabilityStatus models.AvailabilityStatus `json:"availability_status"`
 	AutoReassign       bool                      `json:"auto_reassign"`
 	AddedBy            string                    `json:"added_by"`
-}
-
-type FinalApproverRequest struct {
-	UserID     uuid.UUID `json:"user_id"`
-	AssignedBy string    `json:"assigned_by"`
+	// NEW: Flag to mark as final approver
+	IsFinalApprover bool `json:"is_final_approver"`
 }
 
 func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) error {
@@ -71,33 +67,25 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 		})
 	}
 
-	// Validate UUID formats
+	// Validate UUID formats and count final approvers
+	finalApproverCount := 0
 	for i, member := range request.Members {
 		if member.UserID == uuid.Nil {
 			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 				"message": fmt.Sprintf("Invalid user ID for member at index %d", i),
 			})
 		}
-	}
-
-	if request.FinalApprover.UserID == uuid.Nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"message": "Invalid final approver user ID",
-		})
-	}
-
-	// Validate final approver is one of the members
-	finalApproverIsMember := false
-	for _, member := range request.Members {
-		if member.UserID == request.FinalApprover.UserID {
-			finalApproverIsMember = true
-			break
+		if member.IsFinalApprover {
+			finalApproverCount++
 		}
 	}
 
-	if !finalApproverIsMember {
+	// Validate exactly one final approver
+	if finalApproverCount != 1 {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"message": "Final approver must be one of the group members",
+			"success": false,
+			"message": fmt.Sprintf("Exactly one member must be designated as final approver. Found %d", finalApproverCount),
+			"error":   "Invalid final approver count",
 		})
 	}
 
@@ -113,7 +101,7 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 		CreatedBy:            request.CreatedBy,
 	}
 
-	// Map members
+	// Map members - now including final approver flag
 	for _, memberReq := range request.Members {
 		member := models.ApprovalGroupMember{
 			UserID:             memberReq.UserID,
@@ -127,6 +115,8 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 			AutoReassign:       memberReq.AutoReassign,
 			IsActive:           true,
 			AddedBy:            memberReq.AddedBy,
+			// NEW: Set final approver flag
+			IsFinalApprover: memberReq.IsFinalApprover,
 		}
 		approvalGroup.Members = append(approvalGroup.Members, member)
 	}
@@ -149,7 +139,7 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 		}
 	}()
 
-	// Save the approval group to the database
+	// Save the approval group to the database (includes all members with final approver)
 	createdGroup, err := ac.ApplicationRepo.CreateApprovalGroup(tx, &approvalGroup)
 	if err != nil {
 		tx.Rollback()
@@ -158,26 +148,6 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 			zap.String("groupName", approvalGroup.Name))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"message": "Something went wrong while creating approval group in the database",
-			"error":   err.Error(),
-		})
-	}
-
-	// Create final approver assignment
-	finalApprover := models.FinalApproverAssignment{
-		ApprovalGroupID: createdGroup.ID,
-		UserID:          request.FinalApprover.UserID,
-		AssignedBy:      request.FinalApprover.AssignedBy,
-		IsActive:        true,
-	}
-
-	if err := tx.Create(&finalApprover).Error; err != nil {
-		tx.Rollback()
-		config.Logger.Error("Failed to create final approver assignment",
-			zap.Error(err),
-			zap.String("groupId", createdGroup.ID.String()),
-			zap.String("finalApproverId", request.FinalApprover.UserID.String()))
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"message": "Something went wrong while assigning final approver",
 			"error":   err.Error(),
 		})
 	}
@@ -201,11 +171,20 @@ func (ac *ApplicationController) CreateApprovalGroupWithMembers(c *fiber.Ctx) er
 		completeGroup = createdGroup
 	}
 
+	// Find the final approver member for response
+	var finalApproverMember *models.ApprovalGroupMember
+	for _, member := range completeGroup.Members {
+		if member.IsFinalApprover {
+			finalApproverMember = &member
+			break
+		}
+	}
+
 	response := fiber.Map{
 		"message": "Approval group successfully created with members",
 		"data": fiber.Map{
 			"group":          completeGroup,
-			"final_approver": finalApprover,
+			"final_approver": finalApproverMember,
 		},
 	}
 

@@ -27,6 +27,7 @@ type ApplicationRepository interface {
 	GetApprovalGroupWithMembers(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 	GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error)
 	GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
+	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
 }
 
 type applicationRepository struct {
@@ -49,7 +50,7 @@ func (r *applicationRepository) CreateApprovalGroup(tx *gorm.DB, group *models.A
 // GetApprovalGroupWithMembers fetches an approval group with all its active members and their user details
 func (r *applicationRepository) GetApprovalGroupWithMembers(db *gorm.DB, groupID string) (*models.ApprovalGroup, error) {
 	var group models.ApprovalGroup
-	
+
 	err := db.
 		Preload("Members", "is_active = ?", true).
 		Preload("Members.User").
@@ -68,7 +69,7 @@ func (r *applicationRepository) GetApprovalGroupWithMembers(db *gorm.DB, groupID
 // GetApprovalGroups fetches all approval groups with basic member info
 func (r *applicationRepository) GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error) {
 	var groups []models.ApprovalGroup
-	
+
 	err := db.
 		Preload("Members", "is_active = ?", true).
 		Preload("Members.User", func(db *gorm.DB) *gorm.DB {
@@ -88,7 +89,7 @@ func (r *applicationRepository) GetApprovalGroups(db *gorm.DB) ([]models.Approva
 // GetApprovalGroupByID fetches a single approval group by ID without members
 func (r *applicationRepository) GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error) {
 	var group models.ApprovalGroup
-	
+
 	err := db.
 		Where("id = ?", groupID).
 		First(&group).Error
@@ -101,19 +102,119 @@ func (r *applicationRepository) GetApprovalGroupByID(db *gorm.DB, groupID string
 }
 
 func (r *applicationRepository) GetApplicationById(applicationID string) (*models.Application, error) {
-    var application models.Application
-    if err := r.db.
-        Preload("Applicant").
-        Preload("Tariff").
-        Preload("Tariff.DevelopmentCategory").
-        Preload("VATRate").
+	var application models.Application
+	if err := r.db.
+		Preload("Applicant").
+		Preload("Tariff").
+		Preload("Tariff.DevelopmentCategory").
+		Preload("VATRate").
 		Preload("Documents").
 		Preload("Payment").
-        Where("id = ?", applicationID).
-        First(&application).Error; err != nil {
-        return nil, err
-    }
-    return &application, nil
+		Where("id = ?", applicationID).
+		First(&application).Error; err != nil {
+		return nil, err
+	}
+	return &application, nil
+}
+
+// GetFilteredApprovalGroups fetches approval groups with filtering and pagination
+func (r *applicationRepository) GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error) {
+	var approvalGroups []models.ApprovalGroup
+	var total int64
+
+	// Start building the query with preloads for members and their users
+	query := r.db.Model(&models.ApprovalGroup{}).
+		Preload("Members", func(db *gorm.DB) *gorm.DB {
+			return db.Where("is_active = ?", true).Order("review_order ASC")
+		}).
+		Preload("Members.User").
+		Preload("Assignments", func(db *gorm.DB) *gorm.DB {
+			return db.Where("is_active = ?", true)
+		})
+		
+
+	// Apply filters
+	if name, exists := filters["name"]; exists && name != "" {
+		query = query.Where("name ILIKE ?", "%"+name+"%")
+	}
+
+	if groupType, exists := filters["type"]; exists && groupType != "" {
+		query = query.Where("type = ?", groupType)
+	}
+
+	if isActive, exists := filters["is_active"]; exists && isActive != "" {
+		if isActive == "true" {
+			query = query.Where("is_active = ?", true)
+		} else if isActive == "false" {
+			query = query.Where("is_active = ?", false)
+		}
+	}
+
+	if requiresAllApprovals, exists := filters["requires_all_approvals"]; exists && requiresAllApprovals != "" {
+		if requiresAllApprovals == "true" {
+			query = query.Where("requires_all_approvals = ?", true)
+		} else if requiresAllApprovals == "false" {
+			query = query.Where("requires_all_approvals = ?", false)
+		}
+	}
+
+	if autoAssignBackups, exists := filters["auto_assign_backups"]; exists && autoAssignBackups != "" {
+		if autoAssignBackups == "true" {
+			query = query.Where("auto_assign_backups = ?", true)
+		} else if autoAssignBackups == "false" {
+			query = query.Where("auto_assign_backups = ?", false)
+		}
+	}
+
+	if createdBy, exists := filters["created_by"]; exists && createdBy != "" {
+		query = query.Where("created_by ILIKE ?", "%"+createdBy+"%")
+	}
+
+	// Filter for groups with active members
+	if hasActiveMembers, exists := filters["has_active_members"]; exists && hasActiveMembers != "" {
+		if hasActiveMembers == "true" {
+			query = query.Joins("JOIN approval_group_members ON approval_group_members.approval_group_id = approval_groups.id").
+				Where("approval_group_members.is_active = ?", true)
+		} else if hasActiveMembers == "false" {
+			query = query.Where("NOT EXISTS (?)", 
+				r.db.Model(&models.ApprovalGroupMember{}).
+					Where("approval_group_members.approval_group_id = approval_groups.id").
+					Where("approval_group_members.is_active = ?", true),
+			)
+		}
+	}
+
+	// NEW: Filter for groups that have a final approver
+	if hasFinalApprover, exists := filters["has_final_approver"]; exists && hasFinalApprover != "" {
+		if hasFinalApprover == "true" {
+			query = query.Joins("JOIN approval_group_members ON approval_group_members.approval_group_id = approval_groups.id").
+				Where("approval_group_members.is_final_approver = ?", true).
+				Where("approval_group_members.is_active = ?", true)
+		} else if hasFinalApprover == "false" {
+			query = query.Where("NOT EXISTS (?)", 
+				r.db.Model(&models.ApprovalGroupMember{}).
+					Where("approval_group_members.approval_group_id = approval_groups.id").
+					Where("approval_group_members.is_final_approver = ?", true).
+					Where("approval_group_members.is_active = ?", true),
+			)
+		}
+	}
+
+	// Count total number of records matching the filters
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// Fetch paginated approval groups, ordered by name
+	if err := query.
+		Order("name ASC, created_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&approvalGroups).Error; err != nil {
+		return nil, 0, err
+	}
+
+	return approvalGroups, total, nil
 }
 
 // GetFilteredApplications fetches applications with filtering and pagination

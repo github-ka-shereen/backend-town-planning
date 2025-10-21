@@ -1,6 +1,7 @@
 package models
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -67,7 +68,7 @@ type ApprovalGroup struct {
 	MinimumApprovals     int  `gorm:"default:1" json:"minimum_approvals"`
 
 	// Auto-assignment configuration
-	AutoAssignBackups bool `gorm:"default:false" json:"auto_assign_backups"` // Auto-use backups when primary unavailable
+	AutoAssignBackups bool `gorm:"default:false" json:"auto_assign_backups"`
 
 	// Relationships
 	Members     []ApprovalGroupMember        `gorm:"foreignKey:ApprovalGroupID" json:"members,omitempty"`
@@ -81,7 +82,7 @@ type ApprovalGroup struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// ApprovalGroupMember represents individual members of an approval group
+// ApprovalGroupMember represents ALL members of an approval group (including final approver)
 type ApprovalGroupMember struct {
 	ID              uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ApprovalGroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"approval_group_id"`
@@ -94,6 +95,9 @@ type ApprovalGroupMember struct {
 	CanApprove     bool       `gorm:"default:true" json:"can_approve"`
 	CanReject      bool       `gorm:"default:true" json:"can_reject"`
 	ReviewOrder    int        `gorm:"default:0" json:"review_order"`
+
+	// NEW: Final approver flag
+	IsFinalApprover bool `gorm:"default:false;index" json:"is_final_approver"`
 
 	// Availability management
 	AvailabilityStatus AvailabilityStatus `gorm:"type:varchar(20);default:'AVAILABLE'" json:"availability_status"`
@@ -138,13 +142,19 @@ type ApplicationGroupAssignment struct {
 	IssuesRaised     int `gorm:"default:0" json:"issues_raised"`
 	IssuesResolved   int `gorm:"default:0" json:"issues_resolved"`
 
+	// Final approver tracking
+	ReadyForFinalApproval   bool       `gorm:"default:false" json:"ready_for_final_approval"`
+	FinalApproverAssignedAt *time.Time `json:"final_approver_assigned_at"`
+	FinalDecisionAt         *time.Time `json:"final_decision_at"`
+
 	// Backup assignment tracking
 	UsedBackupMembers bool `gorm:"default:false" json:"used_backup_members"`
 
 	// Relationships
-	Application Application              `gorm:"foreignKey:ApplicationID" json:"application"`
-	Group       ApprovalGroup            `gorm:"foreignKey:ApprovalGroupID" json:"group"`
-	Decisions   []MemberApprovalDecision `gorm:"foreignKey:AssignmentID" json:"decisions,omitempty"`
+	Application   Application              `gorm:"foreignKey:ApplicationID" json:"application"`
+	Group         ApprovalGroup            `gorm:"foreignKey:ApprovalGroupID" json:"group"`
+	Decisions     []MemberApprovalDecision `gorm:"foreignKey:AssignmentID" json:"decisions,omitempty"`
+	FinalDecision *FinalApproval           `gorm:"foreignKey:ApplicationID" json:"final_decision,omitempty"`
 
 	// Audit fields
 	AssignedBy string         `gorm:"not null" json:"assigned_by"`
@@ -167,6 +177,9 @@ type MemberApprovalDecision struct {
 
 	// Assignment type (primary vs backup)
 	AssignedAs MemberRole `gorm:"type:varchar(20);default:'PRIMARY'" json:"assigned_as"`
+
+	// NEW: Track if this is a final approver decision
+	IsFinalApproverDecision bool `gorm:"default:false" json:"is_final_approver_decision"`
 
 	// Availability at time of assignment
 	WasAvailable bool `gorm:"default:true" json:"was_available"`
@@ -199,56 +212,104 @@ type MemberApprovalDecision struct {
 type ApplicationIssue struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ApplicationID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
-	AssignmentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"assignment_id"`
+	AssignmentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"assignment_id"` // Links to ApplicationGroupAssignment
 
-	// Who raised the issue
-	RaisedByDecisionID uuid.UUID  `gorm:"type:uuid;not null;index" json:"raised_by_decision_id"`
-	RaisedByUserID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"raised_by_user_id"`
-	RaisedByRole       MemberRole `gorm:"type:varchar(20)" json:"raised_by_role"` // Role when issue was raised
+	// ========================================
+	// WHO RAISED THE ISSUE
+	// ========================================
+	// Link to the decision record where this issue was raised
+	// This gives us access to all decision context (member, role, status, etc.)
+	RaisedByDecisionID uuid.UUID `gorm:"type:uuid;not null;index" json:"raised_by_decision_id"`
 
-	// Issue details
+	// Direct link to user for quick queries (denormalized for performance)
+	// User details (name, email, etc.) come from User table relationship
+	RaisedByUserID uuid.UUID `gorm:"type:uuid;not null;index" json:"raised_by_user_id"`
+
+	// ========================================
+	// WHO CAN RESOLVE THE ISSUE
+	// ========================================
+	// Controls the resolution permissions
+	AssignmentType IssueAssignmentType `gorm:"type:varchar(30);default:'COLLABORATIVE';not null" json:"assignment_type"`
+
+	// For SPECIFIC_USER mode: Points to any user in system
+	// NULL for COLLABORATIVE and GROUP_MEMBER modes
+	AssignedToUserID *uuid.UUID `gorm:"type:uuid;index" json:"assigned_to_user_id"`
+
+	// For GROUP_MEMBER mode: Points to specific approval group member
+	// NULL for COLLABORATIVE and SPECIFIC_USER modes
+	AssignedToGroupMemberID *uuid.UUID `gorm:"type:uuid;index" json:"assigned_to_group_member_id"`
+
+	// ========================================
+	// ISSUE DETAILS
+	// ========================================
 	Title       string  `gorm:"type:varchar(200);not null" json:"title"`
 	Description string  `gorm:"type:text;not null" json:"description"`
-	Priority    string  `gorm:"type:varchar(20);default:'MEDIUM'" json:"priority"`
-	Category    *string `gorm:"type:varchar(50)" json:"category"`
+	Priority    string  `gorm:"type:varchar(20);default:'MEDIUM'" json:"priority"` // LOW, MEDIUM, HIGH, CRITICAL
+	Category    *string `gorm:"type:varchar(50)" json:"category"`                  // Optional: LOGISTICS, TECHNICAL, ADMINISTRATIVE, etc.
 
-	// Resolution tracking
+	// ========================================
+	// RESOLUTION TRACKING
+	// ========================================
 	IsResolved bool       `gorm:"default:false;index" json:"is_resolved"`
 	ResolvedAt *time.Time `json:"resolved_at"`
-	ResolvedBy *uuid.UUID `gorm:"type:uuid" json:"resolved_by"`
-	Resolution *string    `gorm:"type:text" json:"resolution"`
+	ResolvedBy *uuid.UUID `gorm:"type:uuid;index" json:"resolved_by"` // Which user resolved it
+	Resolution *string    `gorm:"type:text" json:"resolution"`        // Resolution details
 
-	// Relationships
-	Application      Application                `gorm:"foreignKey:ApplicationID" json:"application"`
-	Assignment       ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment"`
-	RaisedByDecision MemberApprovalDecision     `gorm:"foreignKey:RaisedByDecisionID" json:"raised_by_decision"`
-	RaisedByUser     User                       `gorm:"foreignKey:RaisedByUserID" json:"raised_by_user"`
-	ResolvedByUser   *User                      `gorm:"foreignKey:ResolvedBy" json:"resolved_by_user,omitempty"`
-	Comments         []Comment                  `gorm:"foreignKey:IssueID" json:"comments,omitempty"`
+	// ========================================
+	// RELATIONSHIPS (NORMALIZED)
+	// ========================================
+	// Main entities
+	Application Application                `gorm:"foreignKey:ApplicationID" json:"application"`
+	Assignment  ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment"`
 
-	// Audit fields
+	// Who raised the issue
+	RaisedByDecision MemberApprovalDecision `gorm:"foreignKey:RaisedByDecisionID" json:"raised_by_decision"`
+	RaisedByUser     User                   `gorm:"foreignKey:RaisedByUserID" json:"raised_by_user"`
+
+	// Who can/did resolve
+	AssignedToUser        *User                `gorm:"foreignKey:AssignedToUserID" json:"assigned_to_user,omitempty"`
+	AssignedToGroupMember *ApprovalGroupMember `gorm:"foreignKey:AssignedToGroupMemberID" json:"assigned_to_group_member,omitempty"`
+	ResolvedByUser        *User                `gorm:"foreignKey:ResolvedBy" json:"resolved_by_user,omitempty"`
+
+	// Comments on this issue
+	Comments []Comment `gorm:"foreignKey:IssueID" json:"comments,omitempty"`
+
+	// ========================================
+	// AUDIT FIELDS
+	// ========================================
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// FinalApproverAssignment tracks final approvers for approval groups
-type FinalApproverAssignment struct {
-	ID              uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	ApprovalGroupID uuid.UUID `gorm:"type:uuid;not null;index" json:"approval_group_id"`
-	UserID          uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
-	AssignedBy      string    `gorm:"not null" json:"assigned_by"`
-	IsActive        bool      `gorm:"default:true;index" json:"is_active"`
+// ========================================
+// ISSUE ASSIGNMENT TYPES - CLEARLY DEFINED
+// ========================================
+type IssueAssignmentType string
 
-	// Relationships
-	ApprovalGroup ApprovalGroup `gorm:"foreignKey:ApprovalGroupID" json:"approval_group"`
-	User          User          `gorm:"foreignKey:UserID" json:"user"`
+const (
+	// 🔓 COLLABORATIVE: ANY staff member can resolve this issue
+	// Use for: General questions, information gathering, collaborative problems
+	// Example: "Is there paper for printing permits?" → Anyone who knows can answer
+	// Fields used: AssignedToUserID = NULL, AssignedToGroupMemberID = NULL
+	IssueAssignment_COLLABORATIVE IssueAssignmentType = "COLLABORATIVE"
 
-	// Audit fields
-	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
-}
+	// 👥 GROUP_MEMBER: Only a SPECIFIC approval group member can resolve
+	// Use for: Technical questions requiring specific expertise within the group
+	// Example: "Verify structural engineering calculations" → Only engineering member can approve
+	// Fields used: AssignedToGroupMemberID = required, AssignedToUserID = NULL
+	IssueAssignment_GROUP_MEMBER IssueAssignmentType = "GROUP_MEMBER"
+
+	// 👤 SPECIFIC_USER: Only ONE SPECIFIC staff member (anywhere in system) can resolve
+	// Use for: Department-specific questions, external expertise, specialized tasks
+	// Example: "Printing department - confirm paper is available" → Only printing staff member
+	// Fields used: AssignedToUserID = required, AssignedToGroupMemberID = NULL
+	IssueAssignment_SPECIFIC_USER IssueAssignmentType = "SPECIFIC_USER"
+)
+
+// ========================================
+// HELPER METHODS FOR VALIDATION
+// ========================================
 
 // FinalApproval represents the final decision by the designated approver
 type FinalApproval struct {
@@ -260,6 +321,10 @@ type FinalApproval struct {
 	Decision   ApplicationStatus `gorm:"type:varchar(30);not null" json:"decision"`
 	DecisionAt time.Time         `gorm:"not null" json:"decision_at"`
 	Comment    *string           `gorm:"type:text" json:"comment"`
+
+	// Override information (if final approver overrode group decision)
+	OverrodeGroupDecision bool    `gorm:"default:false" json:"overrode_group_decision"`
+	OverrideReason        *string `gorm:"type:text" json:"override_reason"`
 
 	// Relationships
 	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
@@ -350,18 +415,140 @@ func (fa *FinalApproval) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// ADDED: BeforeCreate hook for FinalApproverAssignment
-func (faa *FinalApproverAssignment) BeforeCreate(tx *gorm.DB) error {
-	if faa.ID == uuid.Nil {
-		faa.ID = uuid.New()
-	}
-	return nil
-}
-
-// Comment
 func (c *Comment) BeforeCreate(tx *gorm.DB) (err error) {
 	if c.ID == uuid.Nil {
 		c.ID = uuid.New()
 	}
 	return
+}
+
+// Helper method to check if all regular members have approved
+func (aga *ApplicationGroupAssignment) AllRegularMembersApproved() bool {
+	// Count only non-final-approver members
+	regularMembersCount := 0
+	for _, member := range aga.Group.Members {
+		if !member.IsFinalApprover {
+			regularMembersCount++
+		}
+	}
+
+	if aga.Group.RequiresAllApprovals {
+		return aga.ApprovedCount >= regularMembersCount
+	}
+	return aga.ApprovedCount >= aga.Group.MinimumApprovals
+}
+
+// Helper method to check if application is ready for final approval
+func (aga *ApplicationGroupAssignment) IsReadyForFinalApproval() bool {
+	return aga.AllRegularMembersApproved() && aga.IssuesRaised == aga.IssuesResolved
+}
+
+// Helper method to get the final approver member
+func (ag *ApprovalGroup) GetFinalApprover() *ApprovalGroupMember {
+	for _, member := range ag.Members {
+		if member.IsFinalApprover && member.IsActive {
+			return &member
+		}
+	}
+	return nil
+}
+
+// Helper method to get regular members (non-final approvers)
+func (ag *ApprovalGroup) GetRegularMembers() []ApprovalGroupMember {
+	var regularMembers []ApprovalGroupMember
+	for _, member := range ag.Members {
+		if !member.IsFinalApprover && member.IsActive {
+			regularMembers = append(regularMembers, member)
+		}
+	}
+	return regularMembers
+}
+
+// CanUserResolveIssue checks if a user has permission to resolve this issue
+func (issue *ApplicationIssue) CanUserResolveIssue(userID uuid.UUID) bool {
+	if issue.IsResolved {
+		return false // Already resolved
+	}
+
+	switch issue.AssignmentType {
+	case IssueAssignment_COLLABORATIVE:
+		// Any authenticated staff member can resolve
+		return true
+
+	case IssueAssignment_GROUP_MEMBER:
+		// Only the specifically assigned group member can resolve
+		if issue.AssignedToGroupMemberID == nil {
+			return false
+		}
+		// Check if the user is the assigned group member
+		return issue.AssignedToGroupMember != nil && issue.AssignedToGroupMember.UserID == userID
+
+	case IssueAssignment_SPECIFIC_USER:
+		// Only the specifically assigned user can resolve
+		if issue.AssignedToUserID == nil {
+			return false
+		}
+		return *issue.AssignedToUserID == userID
+
+	default:
+		return false
+	}
+}
+
+// GetRequiredResolver returns information about who needs to resolve this issue
+func (issue *ApplicationIssue) GetRequiredResolver() string {
+	switch issue.AssignmentType {
+	case IssueAssignment_COLLABORATIVE:
+		return "Any staff member can resolve"
+	case IssueAssignment_GROUP_MEMBER:
+		if issue.AssignedToGroupMember != nil && issue.AssignedToGroupMember.UserID != uuid.Nil {
+			return fmt.Sprintf("Only %s %s (Group Member) can resolve",
+				issue.AssignedToGroupMember.User.FirstName,
+				issue.AssignedToGroupMember.User.LastName)
+		}
+		return "Specific group member required"
+	case IssueAssignment_SPECIFIC_USER:
+		if issue.AssignedToUser != nil {
+			return fmt.Sprintf("Only %s %s can resolve",
+				issue.AssignedToUser.FirstName,
+				issue.AssignedToUser.LastName)
+		}
+		return "Specific user required"
+	default:
+		return "Unknown assignment type"
+	}
+}
+
+// ValidateAssignment ensures the assignment is properly configured
+func (issue *ApplicationIssue) ValidateAssignment() error {
+	switch issue.AssignmentType {
+	case IssueAssignment_COLLABORATIVE:
+		// Should not have specific assignments
+		if issue.AssignedToUserID != nil || issue.AssignedToGroupMemberID != nil {
+			return fmt.Errorf("COLLABORATIVE issues cannot have specific assignments")
+		}
+
+	case IssueAssignment_GROUP_MEMBER:
+		// Must have group member assignment
+		if issue.AssignedToGroupMemberID == nil {
+			return fmt.Errorf("GROUP_MEMBER issues require AssignedToGroupMemberID")
+		}
+		if issue.AssignedToUserID != nil {
+			return fmt.Errorf("GROUP_MEMBER issues cannot have AssignedToUserID")
+		}
+
+	case IssueAssignment_SPECIFIC_USER:
+		// Must have user assignment
+		if issue.AssignedToUserID == nil {
+			return fmt.Errorf("SPECIFIC_USER issues require AssignedToUserID")
+		}
+		if issue.AssignedToGroupMemberID != nil {
+			return fmt.Errorf("SPECIFIC_USER issues cannot have AssignedToGroupMemberID")
+		}
+
+	default:
+		return fmt.Errorf("invalid assignment type: %s", issue.AssignmentType)
+	}
+
+	return nil
 }
