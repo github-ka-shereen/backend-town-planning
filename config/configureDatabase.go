@@ -133,18 +133,14 @@ func ConfigureDatabase() *gorm.DB {
 	// 	log.Printf("Failed to drop stand_swap_owners join table: %v", err)
 	// }
 
-
 	// // // Then drop other specific tables
 	// specificTablesToDrop := []string{
-	// 	"final_approver_assignments",
-	// 	"final_approvals",
-	// 	"member_approval_decisions",
-	// 	"application_issues",
-	// 	"application_group_assignments",
-	// 	"approval_group_members",
-	// 	"approval_groups",
-	// 	// Also drop any comments that might be linked to decisions/issues
-	// 	"comments",
+	// 	"applications_payment",
+	// 	"payments",
+	// 	"applications",
+	// 	"documents",
+	// 	"document_versions",
+	// 	"document_audit_logs",
 	// }
 
 	// for _, table := range specificTablesToDrop {

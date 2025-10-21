@@ -27,6 +27,7 @@ type CreateApplicationRequest struct {
 	ArchitectPhoneNumber *string         `json:"architect_phone_number"`
 	StandID              uuid.UUID       `json:"stand_id" validate:"required"`
 	ApplicantID          string          `json:"applicant_id" validate:"required,uuid4"`
+	AssignedGroupID      *uuid.UUID      `json:"assigned_group_id" validate:"required,uuid4"`
 	TariffID             string          `json:"tariff_id" validate:"required,uuid4"`
 	PropertyTypeID       string          `json:"property_type_id" validate:"required,uuid4"`
 	DevelopmentLevy      decimal.Decimal `json:"development_levy" validate:"required,min=0"`
@@ -181,6 +182,7 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 		Status:               models.ApplicationStatus(req.Status),
 		SubmissionDate:       submissionDate,
 		StandID:              &req.StandID,
+		AssignedGroupID:      req.AssignedGroupID,
 		ApplicantID:          uuid.MustParse(req.ApplicantID),
 		TariffID:             &tariff.ID,
 		VATRateID:            &activeVatRate.ID,
