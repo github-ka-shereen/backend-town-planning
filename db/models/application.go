@@ -172,7 +172,8 @@ type Application struct {
 	VATRateID *uuid.UUID `gorm:"type:uuid;index" json:"vat_rate_id"`
 
 	// Approval group assignment (can be null if using global group)
-	AssignedGroupID *uuid.UUID `gorm:"type:uuid;index" json:"assigned_group_id"`
+	AssignedGroupID *uuid.UUID     `gorm:"type:uuid;index" json:"assigned_group_id"`
+	ApprovalGroup   *ApprovalGroup `gorm:"foreignKey:AssignedGroupID" json:"approval_group,omitempty"`
 
 	// Final approver assignment
 	FinalApproverID *uuid.UUID `gorm:"type:uuid;index" json:"final_approver_id"`

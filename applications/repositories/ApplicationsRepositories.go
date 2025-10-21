@@ -28,6 +28,7 @@ type ApplicationRepository interface {
 	GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error)
 	GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
+	GetDataForApplicationApproval(applicationID string) (map[string]interface{}, error)
 }
 
 type applicationRepository struct {
@@ -110,6 +111,7 @@ func (r *applicationRepository) GetApplicationById(applicationID string) (*model
 		Preload("VATRate").
 		Preload("Documents").
 		Preload("Payment").
+		Preload("ApprovalGroup.Members.User.Department").
 		Where("id = ?", applicationID).
 		First(&application).Error; err != nil {
 		return nil, err
@@ -131,7 +133,6 @@ func (r *applicationRepository) GetFilteredApprovalGroups(limit, offset int, fil
 		Preload("Assignments", func(db *gorm.DB) *gorm.DB {
 			return db.Where("is_active = ?", true)
 		})
-		
 
 	// Apply filters
 	if name, exists := filters["name"]; exists && name != "" {
@@ -176,7 +177,7 @@ func (r *applicationRepository) GetFilteredApprovalGroups(limit, offset int, fil
 			query = query.Joins("JOIN approval_group_members ON approval_group_members.approval_group_id = approval_groups.id").
 				Where("approval_group_members.is_active = ?", true)
 		} else if hasActiveMembers == "false" {
-			query = query.Where("NOT EXISTS (?)", 
+			query = query.Where("NOT EXISTS (?)",
 				r.db.Model(&models.ApprovalGroupMember{}).
 					Where("approval_group_members.approval_group_id = approval_groups.id").
 					Where("approval_group_members.is_active = ?", true),
@@ -191,7 +192,7 @@ func (r *applicationRepository) GetFilteredApprovalGroups(limit, offset int, fil
 				Where("approval_group_members.is_final_approver = ?", true).
 				Where("approval_group_members.is_active = ?", true)
 		} else if hasFinalApprover == "false" {
-			query = query.Where("NOT EXISTS (?)", 
+			query = query.Where("NOT EXISTS (?)",
 				r.db.Model(&models.ApprovalGroupMember{}).
 					Where("approval_group_members.approval_group_id = approval_groups.id").
 					Where("approval_group_members.is_final_approver = ?", true).
