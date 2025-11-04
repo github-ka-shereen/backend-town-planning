@@ -13,20 +13,17 @@ import (
 )
 
 type ApproveApplicationRequest struct {
-	ApplicationID string             `json:"application_id"`
 	Comment       *string            `json:"comment"`
 	CommentType   models.CommentType `json:"comment_type"`
 }
 
 type RejectApplicationRequest struct {
-	ApplicationID string             `json:"application_id"`
 	Reason        string             `json:"reason"`
 	Comment       *string            `json:"comment"`
 	CommentType   models.CommentType `json:"comment_type"`
 }
 
 type RaiseIssueRequest struct {
-	ApplicationID           string                     `json:"application_id"`
 	Title                   string                     `json:"title"`
 	Description             string                     `json:"description"`
 	Priority                string                     `json:"priority"`
@@ -45,6 +42,7 @@ type ResolveIssueRequest struct {
 // ApproveApplication handles application approval by a group member
 func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx) error {
 	var request ApproveApplicationRequest
+	applicationID := c.Params("id")
 
 	// Parse incoming JSON payload
 	if err := c.BodyParser(&request); err != nil {
@@ -56,7 +54,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 	}
 
 	// Validate required fields
-	if request.ApplicationID == "" {
+	if applicationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Application ID is required",
@@ -96,7 +94,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 	if tx.Error != nil {
 		config.Logger.Error("Failed to begin database transaction for approval",
 			zap.Error(tx.Error),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -110,7 +108,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 			tx.Rollback()
 			config.Logger.Error("Panic detected during approval, rolling back transaction",
 				zap.Any("panic_reason", r),
-				zap.String("applicationID", request.ApplicationID),
+				zap.String("applicationID", applicationID),
 				zap.String("userID", userUUID.String()))
 			panic(r)
 		}
@@ -119,7 +117,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 	// Process the approval
 	approvalResult, err := ac.ApplicationRepo.ProcessApplicationApproval(
 		tx,
-		request.ApplicationID,
+		applicationID,
 		userUUID,
 		request.Comment,
 		request.CommentType,
@@ -128,7 +126,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 		tx.Rollback()
 		config.Logger.Error("Failed to process application approval",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 
 		statusCode := fiber.StatusInternalServerError
@@ -138,7 +136,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 			statusCode = fiber.StatusNotFound
 		}
 
-		return c.Status(statusCode).JSON(fiber	.Map{
+		return c.Status(statusCode).JSON(fiber.Map{
 			"success": false,
 			"message": fmt.Sprintf("Failed to approve application: %s", err.Error()),
 			"error":   err.Error(),
@@ -149,7 +147,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 	if err := tx.Commit().Error; err != nil {
 		config.Logger.Error("Failed to commit database transaction for approval",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -159,7 +157,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 	}
 
 	config.Logger.Info("Application approved successfully",
-		zap.String("applicationID", request.ApplicationID),
+		zap.String("applicationID", applicationID),
 		zap.String("userID", userUUID.String()),
 		zap.Bool("isFinalApprover", approvalResult.IsFinalApprover),
 		zap.Bool("readyForFinalApproval", approvalResult.ReadyForFinalApproval))
@@ -177,4 +175,3 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 
 	return c.Status(fiber.StatusOK).JSON(response)
 }
-

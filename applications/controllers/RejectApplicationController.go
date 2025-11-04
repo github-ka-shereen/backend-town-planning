@@ -13,6 +13,7 @@ import (
 // RejectApplication handles application rejection by a group member
 func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error {
 	var request RejectApplicationRequest
+	applicationID := c.Params("id")
 
 	// Parse incoming JSON payload
 	if err := c.BodyParser(&request); err != nil {
@@ -24,7 +25,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 	}
 
 	// Validate required fields
-	if request.ApplicationID == "" {
+	if applicationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Application ID is required",
@@ -71,7 +72,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 	if tx.Error != nil {
 		config.Logger.Error("Failed to begin database transaction for rejection",
 			zap.Error(tx.Error),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -85,7 +86,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 			tx.Rollback()
 			config.Logger.Error("Panic detected during rejection, rolling back transaction",
 				zap.Any("panic_reason", r),
-				zap.String("applicationID", request.ApplicationID),
+				zap.String("applicationID", applicationID),
 				zap.String("userID", userUUID.String()))
 			panic(r)
 		}
@@ -94,7 +95,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 	// Process the rejection
 	rejectionResult, err := ac.ApplicationRepo.ProcessApplicationRejection(
 		tx,
-		request.ApplicationID,
+		applicationID,
 		userUUID,
 		request.Reason,
 		request.Comment,
@@ -104,7 +105,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 		tx.Rollback()
 		config.Logger.Error("Failed to process application rejection",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 
 		statusCode := fiber.StatusInternalServerError
@@ -125,7 +126,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 	if err := tx.Commit().Error; err != nil {
 		config.Logger.Error("Failed to commit database transaction for rejection",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -135,7 +136,7 @@ func (ac *ApplicationController) RejectApplicationController(c *fiber.Ctx) error
 	}
 
 	config.Logger.Info("Application rejected successfully",
-		zap.String("applicationID", request.ApplicationID),
+		zap.String("applicationID", applicationID),
 		zap.String("userID", userUUID.String()),
 		zap.Bool("isFinalApprover", rejectionResult.IsFinalApprover))
 

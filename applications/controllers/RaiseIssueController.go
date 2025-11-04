@@ -14,6 +14,7 @@ import (
 // RaiseIssue handles raising an issue for an application
 func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	var request RaiseIssueRequest
+	applicationID := c.Params("id")
 
 	// Parse incoming JSON payload
 	if err := c.BodyParser(&request); err != nil {
@@ -25,7 +26,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	}
 
 	// Validate required fields
-	if request.ApplicationID == "" {
+	if applicationID == "" {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
 			"message": "Application ID is required",
@@ -95,7 +96,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	if tx.Error != nil {
 		config.Logger.Error("Failed to begin database transaction for raising issue",
 			zap.Error(tx.Error),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -109,7 +110,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 			tx.Rollback()
 			config.Logger.Error("Panic detected during issue creation, rolling back transaction",
 				zap.Any("panic_reason", r),
-				zap.String("applicationID", request.ApplicationID),
+				zap.String("applicationID", applicationID),
 				zap.String("userID", userUUID.String()))
 			panic(r)
 		}
@@ -118,7 +119,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	// Process issue creation
 	issue, err := ac.ApplicationRepo.RaiseApplicationIssue(
 		tx,
-		request.ApplicationID,
+		applicationID,
 		userUUID,
 		request.Title,
 		request.Description,
@@ -132,7 +133,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		tx.Rollback()
 		config.Logger.Error("Failed to raise application issue",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 
 		statusCode := fiber.StatusInternalServerError
@@ -153,7 +154,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	if err := tx.Commit().Error; err != nil {
 		config.Logger.Error("Failed to commit database transaction for issue creation",
 			zap.Error(err),
-			zap.String("applicationID", request.ApplicationID),
+			zap.String("applicationID", applicationID),
 			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -163,7 +164,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	}
 
 	config.Logger.Info("Issue raised successfully",
-		zap.String("applicationID", request.ApplicationID),
+		zap.String("applicationID", applicationID),
 		zap.String("userID", userUUID.String()),
 		zap.String("issueID", issue.ID.String()),
 		zap.String("assignmentType", string(request.AssignmentType)))
