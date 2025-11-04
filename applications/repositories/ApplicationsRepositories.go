@@ -6,6 +6,7 @@ import (
 	"time"
 	"town-planning-backend/db/models"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
@@ -29,6 +30,9 @@ type ApplicationRepository interface {
 	GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
 	GetDataForApplicationApproval(applicationID string) (map[string]interface{}, error)
+	ProcessApplicationApproval(tx *gorm.DB, applicationID string, userID uuid.UUID, comment *string, commentType models.CommentType) (*ApprovalResult, error)
+	ProcessApplicationRejection(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string, comment *string, commentType models.CommentType) (*RejectionResult, error)
+	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
 }
 
 type applicationRepository struct {

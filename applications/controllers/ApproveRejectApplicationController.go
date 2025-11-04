@@ -1,0 +1,298 @@
+// controllers/application_approval_controller.go
+package controllers
+
+import (
+	"fmt"
+	"town-planning-backend/config"
+	"town-planning-backend/db/models"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+	"go.uber.org/zap"
+)
+
+type ApproveApplicationRequest struct {
+	ApplicationID string             `json:"application_id"`
+	Comment       *string            `json:"comment"`
+	CommentType   models.CommentType `json:"comment_type"`
+}
+
+type RejectApplicationRequest struct {
+	ApplicationID string             `json:"application_id"`
+	Reason        string             `json:"reason"`
+	Comment       *string            `json:"comment"`
+	CommentType   models.CommentType `json:"comment_type"`
+}
+
+type RaiseIssueRequest struct {
+	ApplicationID           string                     `json:"application_id"`
+	Title                   string                     `json:"title"`
+	Description             string                     `json:"description"`
+	Priority                string                     `json:"priority"`
+	Category                *string                    `json:"category"`
+	AssignmentType          models.IssueAssignmentType `json:"assignment_type"`
+	AssignedToUserID        *uuid.UUID                 `json:"assigned_to_user_id"`
+	AssignedToGroupMemberID *uuid.UUID                 `json:"assigned_to_group_member_id"`
+}
+
+type ResolveIssueRequest struct {
+	IssueID    string  `json:"issue_id"`
+	Resolution string  `json:"resolution"`
+	Comment    *string `json:"comment"`
+}
+
+// ApproveApplication handles application approval by a group member
+func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx) error {
+	var request ApproveApplicationRequest
+
+	// Parse incoming JSON payload
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid request payload",
+			"error":   err.Error(),
+		})
+	}
+
+	// Validate required fields
+	if request.ApplicationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Application ID is required",
+		})
+	}
+
+	// Get user from context (set by authentication middleware)
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not authenticated",
+		})
+	}
+
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user ID format",
+		})
+	}
+
+	// --- Start Database Transaction ---
+	tx := ac.DB.Begin()
+	if tx.Error != nil {
+		config.Logger.Error("Failed to begin database transaction for approval",
+			zap.Error(tx.Error),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Internal server error: Could not start database transaction",
+			"error":   tx.Error.Error(),
+		})
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			config.Logger.Error("Panic detected during approval, rolling back transaction",
+				zap.Any("panic_reason", r),
+				zap.String("applicationID", request.ApplicationID),
+				zap.String("userID", userID))
+			panic(r)
+		}
+	}()
+
+	// Process the approval
+	approvalResult, err := ac.ApplicationRepo.ProcessApplicationApproval(
+		tx,
+		request.ApplicationID,
+		userUUID,
+		request.Comment,
+		request.CommentType,
+	)
+	if err != nil {
+		tx.Rollback()
+		config.Logger.Error("Failed to process application approval",
+			zap.Error(err),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+
+		statusCode := fiber.StatusInternalServerError
+		if err.Error() == "user not authorized to approve this application" {
+			statusCode = fiber.StatusForbidden
+		} else if err.Error() == "application not found" {
+			statusCode = fiber.StatusNotFound
+		}
+
+		return c.Status(statusCode).JSON(fiber.Map{
+			"success": false,
+			"message": fmt.Sprintf("Failed to approve application: %s", err.Error()),
+			"error":   err.Error(),
+		})
+	}
+
+	// --- Commit Database Transaction ---
+	if err := tx.Commit().Error; err != nil {
+		config.Logger.Error("Failed to commit database transaction for approval",
+			zap.Error(err),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Internal server error: Could not commit database transaction",
+			"error":   err.Error(),
+		})
+	}
+
+	config.Logger.Info("Application approved successfully",
+		zap.String("applicationID", request.ApplicationID),
+		zap.String("userID", userID),
+		zap.Bool("isFinalApprover", approvalResult.IsFinalApprover),
+		zap.Bool("readyForFinalApproval", approvalResult.ReadyForFinalApproval))
+
+	response := fiber.Map{
+		"success": true,
+		"message": "Application approved successfully",
+		"data": fiber.Map{
+			"approval_result":          approvalResult,
+			"is_final_approver":        approvalResult.IsFinalApprover,
+			"ready_for_final_approval": approvalResult.ReadyForFinalApproval,
+			"current_status":           approvalResult.ApplicationStatus,
+		},
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}
+
+// RejectApplication handles application rejection by a group member
+func (ac *ApplicationController) RejectApplication(c *fiber.Ctx) error {
+	var request RejectApplicationRequest
+
+	// Parse incoming JSON payload
+	if err := c.BodyParser(&request); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid request payload",
+			"error":   err.Error(),
+		})
+	}
+
+	// Validate required fields
+	if request.ApplicationID == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Application ID is required",
+		})
+	}
+
+	if request.Reason == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Rejection reason is required",
+		})
+	}
+
+	// Get user from context
+	userID, ok := c.Locals("userID").(string)
+	if !ok || userID == "" {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not authenticated",
+		})
+	}
+
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user ID format",
+		})
+	}
+
+	// --- Start Database Transaction ---
+	tx := ac.DB.Begin()
+	if tx.Error != nil {
+		config.Logger.Error("Failed to begin database transaction for rejection",
+			zap.Error(tx.Error),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Internal server error: Could not start database transaction",
+			"error":   tx.Error.Error(),
+		})
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			config.Logger.Error("Panic detected during rejection, rolling back transaction",
+				zap.Any("panic_reason", r),
+				zap.String("applicationID", request.ApplicationID),
+				zap.String("userID", userID))
+			panic(r)
+		}
+	}()
+
+	// Process the rejection
+	rejectionResult, err := ac.ApplicationRepo.ProcessApplicationRejection(
+		tx,
+		request.ApplicationID,
+		userUUID,
+		request.Reason,
+		request.Comment,
+		request.CommentType,
+	)
+	if err != nil {
+		tx.Rollback()
+		config.Logger.Error("Failed to process application rejection",
+			zap.Error(err),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+
+		statusCode := fiber.StatusInternalServerError
+		if err.Error() == "user not authorized to reject this application" {
+			statusCode = fiber.StatusForbidden
+		} else if err.Error() == "application not found" {
+			statusCode = fiber.StatusNotFound
+		}
+
+		return c.Status(statusCode).JSON(fiber.Map{
+			"success": false,
+			"message": fmt.Sprintf("Failed to reject application: %s", err.Error()),
+			"error":   err.Error(),
+		})
+	}
+
+	// --- Commit Database Transaction ---
+	if err := tx.Commit().Error; err != nil {
+		config.Logger.Error("Failed to commit database transaction for rejection",
+			zap.Error(err),
+			zap.String("applicationID", request.ApplicationID),
+			zap.String("userID", userID))
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Internal server error: Could not commit database transaction",
+			"error":   err.Error(),
+		})
+	}
+
+	config.Logger.Info("Application rejected successfully",
+		zap.String("applicationID", request.ApplicationID),
+		zap.String("userID", userID),
+		zap.Bool("isFinalApprover", rejectionResult.IsFinalApprover))
+
+	response := fiber.Map{
+		"success": true,
+		"message": "Application rejected successfully",
+		"data": fiber.Map{
+			"rejection_result":  rejectionResult,
+			"is_final_approver": rejectionResult.IsFinalApprover,
+			"current_status":    rejectionResult.ApplicationStatus,
+		},
+	}
+
+	return c.Status(fiber.StatusOK).JSON(response)
+}

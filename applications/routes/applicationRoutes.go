@@ -35,4 +35,6 @@ func ApplicationRouterInit(
 	applicationRoutes.Patch("/update-application/:id", applicationController.UpdateApplicationController)
 	applicationRoutes.Post("/approval-groups/create-with-members", applicationController.CreateApprovalGroupWithMembers)
 	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
+	applicationRoutes.Patch("/approve-reject-application/:id", applicationController.ApproveRejectApplicationController)
+	applicationRoutes.Patch("/raise-issue/:id", applicationController.RaiseIssueController)
 }
