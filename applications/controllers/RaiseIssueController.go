@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
+	"town-planning-backend/token"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -61,15 +62,27 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	}
 
 	// Get user from context
-	userID, ok := c.Locals("userID").(string)
-	if !ok || userID == "" {
+	// Get user from context (set by authentication middleware)
+	payload, ok := c.Locals("user").(*token.Payload)
+	if !ok || payload == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
 			"message": "User not authenticated",
 		})
 	}
 
-	userUUID, err := uuid.Parse(userID)
+	userEmail := payload.Email
+
+	user, err := ac.UserRepo.GetUserByEmail(userEmail)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Internal server error: Could not retrieve user",
+			"error":   err.Error(),
+		})
+	}
+
+	userUUID, err := uuid.Parse(user.ID.String())
 	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
@@ -83,7 +96,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to begin database transaction for raising issue",
 			zap.Error(tx.Error),
 			zap.String("applicationID", request.ApplicationID),
-			zap.String("userID", userID))
+			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "Internal server error: Could not start database transaction",
@@ -97,7 +110,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 			config.Logger.Error("Panic detected during issue creation, rolling back transaction",
 				zap.Any("panic_reason", r),
 				zap.String("applicationID", request.ApplicationID),
-				zap.String("userID", userID))
+				zap.String("userID", userUUID.String()))
 			panic(r)
 		}
 	}()
@@ -120,7 +133,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to raise application issue",
 			zap.Error(err),
 			zap.String("applicationID", request.ApplicationID),
-			zap.String("userID", userID))
+			zap.String("userID", userUUID.String()))
 
 		statusCode := fiber.StatusInternalServerError
 		if err.Error() == "user not authorized to raise issues for this application" {
@@ -141,7 +154,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to commit database transaction for issue creation",
 			zap.Error(err),
 			zap.String("applicationID", request.ApplicationID),
-			zap.String("userID", userID))
+			zap.String("userID", userUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "Internal server error: Could not commit database transaction",
@@ -151,7 +164,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 
 	config.Logger.Info("Issue raised successfully",
 		zap.String("applicationID", request.ApplicationID),
-		zap.String("userID", userID),
+		zap.String("userID", userUUID.String()),
 		zap.String("issueID", issue.ID.String()),
 		zap.String("assignmentType", string(request.AssignmentType)))
 

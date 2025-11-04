@@ -25,19 +25,32 @@ func ApplicationRouterInit(
 	}
 
 	applicationRoutes := app.Group("/api/v1")
+
+	// Development Categories
 	applicationRoutes.Post("/development-categories", applicationController.CreateDevelopmentCategory)
-	applicationRoutes.Get("/filtered-approval-groups", applicationController.GetFilteredApprovalGroupsController)
 	applicationRoutes.Get("/development-categories", applicationController.GetAllDevelopmentCategories)
 	applicationRoutes.Get("/all-development-categories", applicationController.GetAllActiveDevelopmentCategories)
+
+	// Tariffs
 	applicationRoutes.Post("/add-new-tariff", applicationController.CreateNewTariff)
 	applicationRoutes.Get("/filtered-development-tariffs", applicationController.GetFilteredDevelopmentTariffsController)
+
+	// Approval Groups
+	applicationRoutes.Post("/approval-groups/create-with-members", applicationController.CreateApprovalGroupWithMembers)
+	applicationRoutes.Get("/filtered-approval-groups", applicationController.GetFilteredApprovalGroupsController)
+
+	// Applications
 	applicationRoutes.Post("/create-application", applicationController.CreateApplicationController)
 	applicationRoutes.Get("/filtered-applications", applicationController.GetFilteredApplicationsController)
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
-	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 	applicationRoutes.Patch("/update-application/:id", applicationController.UpdateApplicationController)
-	applicationRoutes.Post("/approval-groups/create-with-members", applicationController.CreateApprovalGroupWithMembers)
-	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
-	applicationRoutes.Patch("/approve-reject-application/:id", applicationController.ApproveRejectApplicationController)
-	applicationRoutes.Patch("/raise-issue/:id", applicationController.RaiseIssueController)
+
+	// Application Actions (MUST come before generic :id routes)
+	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
+	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController) // Change to POST if it modifies data
+
+	// Approval Workflow - Use POST for actions that change state
+	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
+	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
+	applicationRoutes.Post("/applications/:id/issues", applicationController.RaiseIssueController)
 }
