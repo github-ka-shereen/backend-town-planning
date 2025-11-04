@@ -150,7 +150,7 @@ func main() {
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
-	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo)
+	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo)
 	stand_routes.StandRouterInit(app, db, standRepo, bleveInterfaceRepo)
 
 	// Bleve Routes

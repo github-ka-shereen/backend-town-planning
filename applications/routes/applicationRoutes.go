@@ -4,6 +4,7 @@ import (
 	controllers "town-planning-backend/applications/controllers"
 	repositories "town-planning-backend/applications/repositories"
 	indexing_repository "town-planning-backend/bleve/repositories"
+	user_repository "town-planning-backend/users/repositories"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -14,11 +15,13 @@ func ApplicationRouterInit(
 	db *gorm.DB,
 	applicationRepository repositories.ApplicationRepository,
 	bleveRepository indexing_repository.BleveRepositoryInterface,
+	userRepo user_repository.UserRepository,
 ) {
 	applicationController := &controllers.ApplicationController{
 		ApplicationRepo: applicationRepository,
 		DB:              db,
 		BleveRepo:       bleveRepository,
+		UserRepo:        userRepo,
 	}
 
 	applicationRoutes := app.Group("/api/v1")
