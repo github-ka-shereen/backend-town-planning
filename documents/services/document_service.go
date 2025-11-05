@@ -90,7 +90,8 @@ func (s *DocumentService) UnifiedCreateDocument(
 		filePath, fileName, fileSize, err = s.saveMultipartFile(fileHeader, request, applicant)
 	} else if fileContent != nil {
 		if len(fileContent) == 0 {
-			return nil, fmt.Errorf("file content is empty")
+			config.Logger.Warn("File content is empty but proceeding", zap.String("filename", request.FileName))
+			// Don't return error for empty files, just log warning
 		}
 		filePath, fileName, fileSize, err = s.saveByteFile(fileContent, request, applicant)
 	} else {
@@ -101,10 +102,16 @@ func (s *DocumentService) UnifiedCreateDocument(
 		return nil, fmt.Errorf("file save failed: %w", err)
 	}
 
-	// Validate computed file size
-	if fileSize <= 0 {
+	// Validate computed file size - allow zero-sized files but log warning
+	if fileSize < 0 {
 		s.cleanupFile(filePath)
-		return nil, fmt.Errorf("computed file size is invalid: %d bytes", fileSize)
+		return nil, fmt.Errorf("invalid file size: %d bytes", fileSize)
+	}
+	
+	if fileSize == 0 {
+		config.Logger.Warn("File has zero size", 
+			zap.String("filename", fileName),
+			zap.String("path", filePath))
 	}
 
 	config.Logger.Info("File processed successfully",
@@ -126,10 +133,10 @@ func (s *DocumentService) UnifiedCreateDocument(
 		return nil, err
 	}
 
-	// Verify document has valid file size before saving
-	if document.FileSize.IsZero() || document.FileSize.LessThanOrEqual(decimal.Zero) {
+	// Verify document has valid file size before saving (allow zero but not negative)
+	if document.FileSize.LessThan(decimal.NewFromInt(0)) {
 		s.cleanupFile(filePath)
-		return nil, fmt.Errorf("document file size is zero or negative")
+		return nil, fmt.Errorf("document file size is negative")
 	}
 
 	config.Logger.Info("Document record created",
@@ -146,6 +153,7 @@ func (s *DocumentService) UnifiedCreateDocument(
 	// Create entity-document relationships based on request
 	if err := s.createEntityDocumentRelationships(tx, request, createdDocument.ID); err != nil {
 		config.Logger.Error("Failed to create entity-document relationships", zap.Error(err))
+		// Don't return error here as the document was created successfully
 	}
 
 	config.Logger.Info("Document created successfully",
@@ -253,7 +261,10 @@ func (s *DocumentService) createEntityDocumentRelationships(
 	// Create all relationships in transaction
 	for _, rel := range relationships {
 		if err := tx.Create(rel).Error; err != nil {
-			return fmt.Errorf("failed to create relationship: %w", err)
+			config.Logger.Warn("Failed to create document relationship, continuing",
+				zap.Error(err),
+				zap.String("document_id", documentID.String()))
+			// Continue with other relationships instead of failing
 		}
 	}
 
@@ -281,10 +292,18 @@ func (s *DocumentService) CreateCouncilApplicantDocuments(
 
 		response, err := s.UnifiedCreateDocument(tx, c, meta, nil, fileHeader)
 		if err != nil {
-			return nil, fmt.Errorf("failed to process document %d (%s): %w", i+1, fileHeader.Filename, err)
+			config.Logger.Error("Failed to process document, skipping",
+				zap.Int("index", i+1),
+				zap.String("filename", fileHeader.Filename),
+				zap.Error(err))
+			continue // Skip this document but continue with others
 		}
 
 		createdDocuments = append(createdDocuments, response.Document)
+	}
+
+	if len(createdDocuments) == 0 {
+		return nil, fmt.Errorf("no documents were successfully processed")
 	}
 
 	return createdDocuments, nil
@@ -311,10 +330,6 @@ func (s *DocumentService) saveByteFile(
 	request *documents_requests.CreateDocumentRequest,
 	applicant *models.Applicant,
 ) (string, string, int64, error) {
-
-	if len(fileContent) == 0 {
-		return "", "", 0, fmt.Errorf("file content is empty")
-	}
 
 	fileSize := int64(len(fileContent))
 

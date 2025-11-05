@@ -48,7 +48,7 @@ func ApplicationRouterInit(
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
 
 	// New comprehensive update endpoint - updates ALL fields
-	applicationRoutes.Put("/applications/:id", applicationController.UpdateApplicationDetailsController)
+	applicationRoutes.Post("/applications/:id/process-application-submission", applicationController.ProcessApplicationSubmissionController)
 
 	// New granular update endpoints
 	applicationRoutes.Patch("/applications/:id/status", applicationController.UpdateApplicationStatusController)
