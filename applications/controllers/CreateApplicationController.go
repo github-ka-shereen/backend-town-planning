@@ -2,14 +2,13 @@
 package controllers
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
+	documents_requests "town-planning-backend/documents/requests"
 	"town-planning-backend/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -225,52 +224,74 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 			"message": "Application created but quotation generation failed",
 			"error":   err.Error(),
 		})
-	} else {
-		config.Logger.Info("Quotation generated successfully",
+	}
+
+	config.Logger.Info("Quotation generated successfully",
+		zap.String("pdfPath", pdfPath),
+		zap.String("applicationID", createdApplication.ID.String()))
+
+	// Read the generated PDF file
+	pdfBytes, err := os.ReadFile(pdfPath)
+	if err != nil {
+		config.Logger.Error("Failed to read generated quotation PDF",
 			zap.String("pdfPath", pdfPath),
-			zap.String("applicationID", createdApplication.ID.String()))
+			zap.Error(err))
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to read generated quotation PDF",
+			"error":   err.Error(),
+		})
 	}
 
-	// Helper functions
-	getFileSize := func(path string) int64 {
-		info, err := os.Stat(path)
-		if err != nil {
-			return 0
+	// Validate PDF was actually generated and has content
+	if len(pdfBytes) == 0 {
+		config.Logger.Error("Generated quotation PDF is empty",
+			zap.String("pdfPath", pdfPath))
+		tx.Rollback()
+		// Clean up empty PDF file
+		os.Remove(pdfPath)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Generated quotation PDF is empty",
+			"error":   "empty_pdf",
+		})
+	}
+
+	config.Logger.Info("Quotation PDF file loaded successfully",
+		zap.String("path", pdfPath),
+		zap.Int("size_bytes", len(pdfBytes)))
+
+	// Create document request using the service pattern
+	documentRequest := &documents_requests.CreateDocumentRequest{
+		CategoryCode:   "DEVELOPMENT_PERMIT_QUOTATION", // Make sure this category exists
+		FileName:       filename,
+		ApplicationID:  &createdApplication.ID,
+		ApplicantID:    &createdApplication.ApplicantID,
+		CreatedBy:      req.CreatedBy,
+		FileType:       "application/pdf",
+	}
+
+	// Create quotation document using DocumentService
+	response, err := ac.DocumentSvc.UnifiedCreateDocument(
+		tx,
+		c,
+		documentRequest,
+		pdfBytes,
+		nil, // No multipart file header since we're using bytes
+	)
+	if err != nil {
+		config.Logger.Error("Failed to create quotation document",
+			zap.String("applicationID", createdApplication.ID.String()),
+			zap.Error(err))
+
+		// Clean up the generated PDF file since document creation failed
+		if cleanupErr := os.Remove(pdfPath); cleanupErr != nil {
+			config.Logger.Warn("Failed to cleanup PDF file after document creation failure",
+				zap.String("pdfPath", pdfPath),
+				zap.Error(cleanupErr))
 		}
-		return info.Size()
-	}
 
-	generateFileHash := func(path string) string {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return ""
-		}
-		hash := md5.Sum(data)
-		return hex.EncodeToString(hash[:])
-	}
-
-	description := "Development permit quotation"
-
-	// Create the document record in the database
-	quotationDocument := models.Document{
-		ID:            uuid.New(),
-		ApplicationID: &createdApplication.ID,
-		FilePath:      pdfPath,
-		FileName:      filename,
-		DocumentType:  models.GeneratedDevelopmentPermitQuotation, // Use your DocumentType constant
-		FileSize:      getFileSize(pdfPath),                       // Implement this helper
-		FileHash:      generateFileHash(pdfPath),                  // Implement this helper
-		MimeType:      "application/pdf",
-		IsPublic:      true,
-		Description:   &description, // e.g., "Development permit quotation"
-		IsMandatory:   true,
-		IsActive:      true,
-		CreatedBy:     req.CreatedBy,
-	}
-
-	// Create the document within the transaction
-	if err := tx.Create(&quotationDocument).Error; err != nil {
-		config.Logger.Error("Failed to create quotation document", zap.Error(err))
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -280,42 +301,25 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 	}
 
 	config.Logger.Info("Quotation document created successfully",
-		zap.String("documentID", quotationDocument.ID.String()),
+		zap.String("documentID", response.ID.String()),
 		zap.String("applicationID", createdApplication.ID.String()))
 
-	// Optional: Append to the application's Documents slice for the response
-	createdApplication.Documents = append(createdApplication.Documents, quotationDocument)
-
-	// Update the application within the transaction
-	if err := tx.Save(createdApplication).Error; err != nil {
-		config.Logger.Error("Failed to update application", zap.Error(err))
+	// Preload the document for the response
+	if err := tx.Preload("Documents").
+		Preload("Applicant").
+		Preload("Tariff").
+		Preload("Stand").
+		Preload("Tariff.DevelopmentCategory").
+		Preload("VATRate").
+		First(createdApplication, createdApplication.ID).Error; err != nil {
+		config.Logger.Error("Failed to preload application relationships", zap.Error(err))
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
-			"message": "Failed to update application",
+			"message": "Failed to load application details",
 			"error":   err.Error(),
 		})
 	}
-
-	// // Index the application in Bleve within the transaction
-	// if ac.BleveRepo != nil {
-	// 	err := ac.BleveRepo.IndexSingleApplication(*createdApplication)
-	// 	if err != nil {
-	// 		config.Logger.Error("Error indexing application within transaction",
-	// 			zap.Error(err),
-	// 			zap.String("applicationID", createdApplication.ID.String()))
-	// 		tx.Rollback()
-	// 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-	// 			"success": false,
-	// 			"message": "Failed to index application",
-	// 			"error":   err.Error(),
-	// 		})
-	// 	}
-	// 	config.Logger.Info("Successfully indexed application within transaction",
-	// 		zap.String("applicationID", createdApplication.ID.String()))
-	// } else {
-	// 	config.Logger.Warn("BleveRepo is nil, skipping document indexing for application")
-	// }
 
 	// Commit the transaction after all operations succeed
 	if err := tx.Commit().Error; err != nil {
@@ -332,8 +336,15 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
 		"success": true,
 		"message": "Application created successfully",
-		"data":    createdApplication,
-		"pdfPath": pdfPath,
+		"data": fiber.Map{
+			"application": createdApplication,
+			"quotation": fiber.Map{
+				"document_id": response.ID,
+				"filename":    filename,
+				"file_path":   response.Document.FilePath,
+				"generated_at": time.Now().Format(time.RFC3339),
+			},
+		},
 	})
 }
 

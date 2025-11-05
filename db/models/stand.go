@@ -66,9 +66,9 @@ type Project struct {
 	StandsAvailable int        `gorm:"default:0" json:"stands_available"`
 
 	// Relationships - FIXED: Now Document has ProjectID field
-	Developer *Applicant `gorm:"foreignKey:DeveloperID" json:"developer,omitempty"`
-	Stands    []Stand    `gorm:"foreignKey:ProjectID" json:"stands,omitempty"`
-	Documents []Document `gorm:"foreignKey:ProjectID" json:"documents,omitempty"`
+	Developer        *Applicant        `gorm:"foreignKey:DeveloperID" json:"developer,omitempty"`
+	Stands           []Stand           `gorm:"foreignKey:ProjectID" json:"stands,omitempty"`
+	ProjectDocuments []ProjectDocument `gorm:"foreignKey:ProjectID" json:"project_documents,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -97,11 +97,10 @@ type Stand struct {
 	StandTypeID    *uuid.UUID `gorm:"type:uuid;index" json:"stand_type_id"`
 	PropertyTypeID *uuid.UUID `gorm:"type:uuid;index" json:"property_type_id"`
 
-
 	// Ownership Information
-	CurrentOwnerID   *uuid.UUID `gorm:"type:uuid;index" json:"current_owner_id"`
-	PreviousOwnerID  *uuid.UUID `gorm:"type:uuid;index" json:"previous_owner_id"`
-	OwnershipType    *string    `gorm:"type:varchar(30);index" json:"ownership_type"`
+	CurrentOwnerID  *uuid.UUID `gorm:"type:uuid;index" json:"current_owner_id"`
+	PreviousOwnerID *uuid.UUID `gorm:"type:uuid;index" json:"previous_owner_id"`
+	OwnershipType   *string    `gorm:"type:varchar(30);index" json:"ownership_type"`
 
 	// Survey and Deeds Information
 	DeedsNumber    *string    `gorm:"index" json:"deeds_number"`
@@ -137,7 +136,7 @@ type Stand struct {
 	PreviousOwner  *Applicant        `gorm:"foreignKey:PreviousOwnerID" json:"previous_owner,omitempty"`
 	AllStandOwners *[]AllStandOwners `gorm:"foreignKey:StandID;references:ID" json:"all_stand_owners"`
 	Applications   []Application     `gorm:"foreignKey:StandID" json:"applications,omitempty"`
-	Documents      []Document        `gorm:"foreignKey:StandID" json:"documents,omitempty"` // Survey Diagram, General Plan, etc.
+	StandDocuments []StandDocument   `gorm:"foreignKey:StandID" json:"stand_documents,omitempty"`
 
 	// Audit fields
 	CreatedBy  string         `gorm:"not null" json:"created_by"`

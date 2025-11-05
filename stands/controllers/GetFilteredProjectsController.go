@@ -10,7 +10,7 @@ import (
 	"town-planning-backend/utils/pagination"
 
 	"github.com/gofiber/fiber/v2"
-	// "dryback/sms_backend/config" // Import config package
+	// "town-planning-backend/config" // Import config package
 )
 
 func (sc *StandController) GetFilteredProjectsController(c *fiber.Ctx) error {

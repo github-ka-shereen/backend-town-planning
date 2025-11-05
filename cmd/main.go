@@ -16,6 +16,7 @@ import (
 
 	applicants_repositories "town-planning-backend/applicants/repositories"
 	applications_repositories "town-planning-backend/applications/repositories"
+	document_repositories "town-planning-backend/documents/repositories"
 	stands_repositories "town-planning-backend/stands/repositories"
 	users_repositories "town-planning-backend/users/repositories"
 
@@ -32,6 +33,8 @@ import (
 	bleveRoutes "town-planning-backend/bleve/routes"
 	bleveServices "town-planning-backend/bleve/services"
 
+	// documents
+	document_services "town-planning-backend/documents/services"
 	// services
 
 	// "town-planning-backend/internal/bootstrap"
@@ -146,11 +149,16 @@ func main() {
 	applicantRepo := applicants_repositories.NewApplicantRepository(db)
 	applicationRepo := applications_repositories.NewApplicationRepository(db)
 	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
+	documentRepo := document_repositories.NewDocumentRepository(db, standRepo)
+
+	// Services
+	fileStorage := utils.NewLocalFileStorage("./uploads")
+	documentService := document_services.NewDocumentService(documentRepo, fileStorage)
 
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
-	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo)
+	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService)
 	stand_routes.StandRouterInit(app, db, standRepo, bleveInterfaceRepo)
 
 	// Bleve Routes

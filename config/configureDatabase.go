@@ -47,9 +47,9 @@ var allModels = []interface{}{
 	&models.BankAccount{},
 	&models.ExchangeRate{},
 
-	// 6. Permit models (AFTER Application since it references Application)
-	&models.Permit{},
+	// 6. Core Application and Permit models
 	&models.Application{},
+	&models.Permit{},
 
 	// 6a. Payment tracking
 	&models.Payment{},
@@ -57,9 +57,8 @@ var allModels = []interface{}{
 	// 7. Document models (now all referenced tables exist)
 	&models.Document{},
 	&models.DocumentAuditLog{},
-	&models.DocumentVersion{},
 
-	// 8. Approval Workflow Models (ADD THESE NEW MODELS)
+	// 8. Approval Workflow Models
 	&models.ApprovalGroup{},
 	&models.ApprovalGroupMember{},
 	&models.ApplicationGroupAssignment{},
@@ -68,10 +67,23 @@ var allModels = []interface{}{
 	&models.FinalApproval{},
 	&models.Comment{},
 
-	// 9. Other models that reference the above
+	// 9. NEW: Document Join Tables (must come after Document and related entities)
 	&models.ApplicantDocument{},
+	&models.ApplicationDocument{},
+	&models.StandDocument{},
+	&models.ProjectDocument{},
+	&models.CommentDocument{},
+	&models.PaymentDocument{},
+	&models.EmailDocument{},
+	&models.BankDocument{},    // NEW
+	&models.UserDocument{},    // NEW
+
+	// 10. Other models that reference the above
 	&models.AllStandOwners{},
+	&models.Reservation{},
 	&models.EmailLog{},
+
+	// 11. Bulk Upload Error Models
 	&models.BulkUploadErrorProjects{},
 	&models.BulkUploadErrorStands{},
 	&models.BulkStandUploadError{},

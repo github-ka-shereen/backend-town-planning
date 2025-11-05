@@ -86,7 +86,7 @@ func StartBackgroundProcess(
 
 		// Create the email log after the background task completes
 		emailLog = &models.EmailLog{
-			ID:             uuid.New().String(),
+			ID:             uuid.New(),
 			Recipient:      userEmail,
 			Subject:        subject,
 			Message:        message,

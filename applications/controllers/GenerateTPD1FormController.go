@@ -1,8 +1,6 @@
 package controllers
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
 	"os"
 	"regexp"
@@ -10,6 +8,7 @@ import (
 	"time"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
+	documents_requests "town-planning-backend/documents/requests"
 	"town-planning-backend/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -143,49 +142,68 @@ func (ac *ApplicationController) GenerateTPD1FormController(c *fiber.Ctx) error 
 		})
 	}
 
-	// Helper functions for file metadata
-	getFileSize := func(path string) int64 {
-		info, err := os.Stat(path)
-		if err != nil {
-			return 0
-		}
-		return info.Size()
+	// Read the generated PDF file
+	pdfBytes, err := os.ReadFile(pdfPath)
+	if err != nil {
+		config.Logger.Error("Failed to read generated PDF",
+			zap.String("pdfPath", pdfPath),
+			zap.Error(err))
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to read generated PDF",
+			"error":   err.Error(),
+		})
 	}
 
-	generateFileHash := func(path string) string {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return ""
-		}
-		hash := md5.Sum(data)
-		return hex.EncodeToString(hash[:])
+	// Validate PDF was actually generated and has content
+	if len(pdfBytes) == 0 {
+		config.Logger.Error("Generated PDF is empty",
+			zap.String("pdfPath", pdfPath))
+		tx.Rollback()
+		// Clean up empty PDF file
+		os.Remove(pdfPath)
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Generated PDF is empty",
+			"error":   "empty_pdf",
+		})
 	}
 
-	// Create TPD-1 form document record
-	description := "Generated TPD-1 Form Template"
-	currentUser := req.CreatedBy
+	config.Logger.Info("PDF file loaded successfully",
+		zap.String("path", pdfPath),
+		zap.Int("size_bytes", len(pdfBytes)))
 
-	tpd1Document := models.Document{
-		ID:            uuid.New(),
-		ApplicationID: &application.ID,
-		FilePath:      pdfPath,
-		FileName:      filename,
-		DocumentType:  models.GeneratedTPD1Form,
-		FileSize:      getFileSize(pdfPath),
-		FileHash:      generateFileHash(pdfPath),
-		MimeType:      "application/pdf",
-		IsPublic:      true,
-		Description:   &description,
-		IsMandatory:   false,
-		IsActive:      true,
-		CreatedBy:     currentUser,
+	// Create document request using the service pattern
+	documentRequest := &documents_requests.CreateDocumentRequest{
+		CategoryCode:   "TPD1_FORM", // Make sure this category exists in your categories table
+		FileName:       filename,
+		ApplicationID:  &appUUID,
+		ApplicantID:    &application.Applicant.ID,
+		CreatedBy:      req.CreatedBy,
+		FileType:       "application/pdf",
 	}
 
-	// Create the document within the transaction
-	if err := tx.Create(&tpd1Document).Error; err != nil {
+	// Create document using DocumentService (like the accommodation form example)
+	response, err := ac.DocumentSvc.UnifiedCreateDocument(
+		tx,
+		c,
+		documentRequest,
+		pdfBytes,
+		nil, // No multipart file header since we're using bytes
+	)
+	if err != nil {
 		config.Logger.Error("Failed to create TPD-1 form document",
 			zap.String("applicationID", applicationID),
 			zap.Error(err))
+
+		// Clean up the generated PDF file since document creation failed
+		if cleanupErr := os.Remove(pdfPath); cleanupErr != nil {
+			config.Logger.Warn("Failed to cleanup PDF file after document creation failure",
+				zap.String("pdfPath", pdfPath),
+				zap.Error(cleanupErr))
+		}
+
 		tx.Rollback()
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -195,7 +213,7 @@ func (ac *ApplicationController) GenerateTPD1FormController(c *fiber.Ctx) error 
 	}
 
 	config.Logger.Info("TPD-1 form document created successfully",
-		zap.String("documentID", tpd1Document.ID.String()),
+		zap.String("documentID", response.ID.String()),
 		zap.String("applicationID", applicationID))
 
 	// Commit the transaction
@@ -221,17 +239,15 @@ func (ac *ApplicationController) GenerateTPD1FormController(c *fiber.Ctx) error 
 			"plan_number":    application.PlanNumber,
 			"permit_number":  application.PermitNumber,
 			"applicant_name": application.Applicant.FullName,
-			"pdf_path":       pdfPath,
+			"pdf_path":       response.Document.FilePath, // Use the path from the service response
 			"filename":       filename,
-			"document_id":    tpd1Document.ID,
+			"document_id":    response.ID,
 			"generated_at":   time.Now().Format(time.RFC3339),
 		},
 	})
 }
 
 // generateTPD1Filename generates a standardized filename for TPD-1 forms
-// Format: firstname_lastname_tpd1_form_YYYYMMDD_HHMMSS.pdf
-// Example: john_doe_tpd1_form_20241215_150405.pdf
 func generateTPD1Filename(application models.Application) string {
 	// Clean the applicant name for filename use
 	cleanName := cleanStringForFilename(application.Applicant.FullName)

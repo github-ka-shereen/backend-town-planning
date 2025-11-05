@@ -62,20 +62,6 @@ type Applicant struct {
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// ApplicantDocument tracks supporting documents submitted with applications
-type ApplicantDocument struct {
-	ID            uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicantID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
-	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
-	DocumentID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"document_id"`
-	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
-	CreatedBy     string     `json:"created_by"`
-
-	// Relationships
-	Document    Document     `gorm:"foreignKey:DocumentID" json:"document"`
-	Application *Application `gorm:"foreignKey:ApplicationID" json:"application"`
-	Applicant   Applicant    `gorm:"foreignKey:ApplicantID" json:"applicant"`
-}
 
 // ApplicantAdditionalPhone stores alternate contact numbers
 type ApplicantAdditionalPhone struct {

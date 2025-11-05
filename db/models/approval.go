@@ -307,8 +307,6 @@ type ApplicationIssue struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-
-
 // ========================================
 // HELPER METHODS FOR VALIDATION
 // ========================================
@@ -350,6 +348,8 @@ type Comment struct {
 	// Comment details
 	CommentType CommentType `gorm:"type:varchar(30);default:'GENERAL'" json:"comment_type"`
 	Content     string      `gorm:"type:text;not null" json:"content"`
+
+	CommentDocuments []CommentDocument `gorm:"foreignKey:CommentID" json:"comment_documents,omitempty"`
 
 	// User info
 	UserID    uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`

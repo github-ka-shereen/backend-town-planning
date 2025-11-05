@@ -1,48 +1,54 @@
 package models
 
 import (
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
 )
 
+// Approval actions
+type Action string
+
+const (
+	ActionCreate  Action = "CREATE"
+	ActionApprove Action = "APPROVE"
+	ActionReject  Action = "REJECT"
+	ActionDelete  Action = "DELETE"
+	ActionUpdate  Action = "UPDATE"
+	ActionRestore Action = "RESTORE"
+	ActionReplace Action = "REPLACE"
+	ActionPending Action = "PENDING"
+	ActionRevise  Action = "REVERSE"
+)
+
+// DocumentType with housing-specific types
 type DocumentType string
 
 const (
-	PDFDocument                              DocumentType = "PDF"
-	ImageDocument                            DocumentType = "IMAGE"
-	WordDocument                             DocumentType = "WORD_DOCUMENT"
-	SpreadsheetDocument                      DocumentType = "SPREADSHEET"
-	CADDocument                              DocumentType = "CAD_DRAWING"
-	SurveyPlanDocument                       DocumentType = "SURVEY_PLAN"
-	GeneratedDevelopmentPermitQuotation      DocumentType = "GENERATED_DEVELOPMENT_PERMIT_QUOTATION"
-	ProcessedDevelopmentPermitQuotation      DocumentType = "PROCESSED_DEVELOPMENT_PERMIT_QUOTATION"
-	GeneratedTPD1Form                        DocumentType = "GENERATED_TPD1_FORM"
-	ProcessedTPD1Form                        DocumentType = "PROCESSED_TPD1_FORM"
-	ProcessedReceipt                         DocumentType = "PROCESSED_RECEIPT"
-	InitialPlanDocument                      DocumentType = "INITIAL_PLAN"
-	StructuralEngineeringCertificateDocument DocumentType = "STRUCTURAL_ENGINEERING_CERTIFICATE"
-	RingBeamCertificateDocument              DocumentType = "RING_BEAM_CERTIFICATE"
+	WordDocumentType       DocumentType = "WORD_DOCUMENT"
+	TextDocumentType       DocumentType = "TEXT_DOCUMENT"
+	SpreadsheetType        DocumentType = "SPREADSHEET"
+	PresentationType       DocumentType = "PRESENTATION"
+	ImageType              DocumentType = "IMAGE"
+	PDFType                DocumentType = "PDF"
+	CADDrawingType         DocumentType = "CAD_DRAWING"
+	SurveyPlanType         DocumentType = "SURVEY_PLAN"
+	EngineeringCertificate DocumentType = "ENGINEERING_CERTIFICATE"
+	BuildingPlanType       DocumentType = "BUILDING_PLAN"
+	SitePlanType           DocumentType = "SITE_PLAN"
 )
 
-// ActionType defines the type of action performed on a document
-type ActionType string
-
-const (
-	ActionCreate  ActionType = "CREATE"
-	ActionUpdate  ActionType = "UPDATE"
-	ActionReplace ActionType = "REPLACE"
-	ActionDelete  ActionType = "DELETE"
-	ActionRestore ActionType = "RESTORE"
-)
-
-// DocumentCategory represents document categories (will be seeded)
+// DocumentCategory represents document categories
 type DocumentCategory struct {
 	ID          uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	Name        string    `gorm:"type:varchar(100);not null;unique" json:"name"`
+	Code        string    `gorm:"type:varchar(50);not null;unique" json:"code"`
 	Description string    `gorm:"type:text" json:"description"`
-	IsSystem    bool      `gorm:"default:false" json:"is_system"` // System categories cannot be modified
+	IsSystem    bool      `gorm:"default:false" json:"is_system"`
 	IsActive    bool      `gorm:"default:true" json:"is_active"`
 
 	// Audit fields
@@ -52,56 +58,57 @@ type DocumentCategory struct {
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 }
 
-// Document represents uploaded files associated with applicants or applications
+// Document model - CLEANED UP with only core fields and versioning
 type Document struct {
-	ID           uuid.UUID    `gorm:"type:uuid;primary_key;" json:"id"`
-	DocumentCode *string      `gorm:"index" json:"document_code"`
-	FileName     string       `gorm:"not null" json:"file_name"`
-	DocumentType DocumentType `gorm:"type:varchar(100);not null" json:"document_type"`
-	CategoryID   *uuid.UUID   `gorm:"type:uuid" json:"category_id"` // Optional category reference
-	FileSize     int64        `gorm:"not null" json:"file_size"`
-	FilePath     string       `gorm:"not null" json:"file_path"`
-	FileHash     string       `gorm:"index" json:"file_hash"`
-	MimeType     string       `json:"mime_type"`
-	IsPublic     bool         `gorm:"default:false" json:"is_public"`
-	Description  *string      `gorm:"type:text" json:"description"`
-	IsMandatory  bool         `gorm:"default:true" json:"is_mandatory"`
-	IsActive     bool         `gorm:"default:true" json:"is_active"`
+	ID           uuid.UUID       `gorm:"type:uuid;primary_key;" json:"id"`
+	DocumentCode *string         `gorm:"index" json:"document_code"`
+	FileName     string          `json:"file_name"`
+	DocumentType DocumentType    `json:"document_type"`
+	FileSize     decimal.Decimal `json:"file_size"`
+	CategoryID   *uuid.UUID      `gorm:"type:uuid" json:"category_id"`
 
-	// Associations
-	ApplicantID   *uuid.UUID `gorm:"type:uuid;index" json:"applicant_id"`
-	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
-	StandID       *uuid.UUID `gorm:"type:uuid;index" json:"stand_id"`
-	ProjectID     *uuid.UUID `gorm:"type:uuid;index" json:"project_id"`
+	// File storage details
+	FilePath string `json:"file_path"`
+	FileHash string `gorm:"index" json:"file_hash"`
+	MimeType string `json:"mime_type"`
 
-	// Enhanced Version Control - FIXED: Self-referencing within Document table
+	// Document metadata
+	Description *string `gorm:"type:text" json:"description"`
+	IsPublic    bool    `gorm:"default:false" json:"is_public"`
+	IsMandatory bool    `gorm:"default:true" json:"is_mandatory"`
+	IsActive    bool    `gorm:"default:true" json:"is_active"`
+
+	// Version Control
 	Version          int        `gorm:"default:1" json:"version"`
-	PreviousID       *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"` // References another Document
-	OriginalID       *uuid.UUID `gorm:"type:uuid;index" json:"original_id"` // References another Document
+	PreviousID       *uuid.UUID `gorm:"type:uuid;index" json:"previous_id"`
+	OriginalID       *uuid.UUID `gorm:"type:uuid;index" json:"original_id"`
 	IsCurrentVersion bool       `gorm:"default:true;index" json:"is_current_version"`
 
 	// Update tracking
-	UpdateReason *string    `gorm:"type:text" json:"update_reason"`
-	UpdatedBy    *string    `json:"updated_by"` // Who made the last update
-	LastAction   ActionType `gorm:"type:varchar(20);default:'CREATE'" json:"last_action"`
+	UpdateReason *string `gorm:"type:text" json:"update_reason"`
+	UpdatedBy    *string `json:"updated_by"`
+	LastAction   Action  `gorm:"type:varchar(20);default:'CREATE'" json:"last_action"`
 
-	// Relationships - FIXED: Proper self-referencing constraints
-	Applicant   *Applicant   `gorm:"foreignKey:ApplicantID" json:"applicant,omitempty"`
-	Application *Application `gorm:"foreignKey:ApplicationID" json:"application,omitempty"`
-	Stand       *Stand       `gorm:"foreignKey:StandID" json:"stand,omitempty"`
-	Project     *Project     `gorm:"foreignKey:ProjectID" json:"project,omitempty"`
-
-	// Self-referencing relationships within Document table
-	Previous *Document `gorm:"foreignKey:PreviousID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"previous,omitempty"`
-	Original *Document `gorm:"foreignKey:OriginalID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"original,omitempty"`
+	// Relationships - KEEP ONLY category and versioning relationships
+	Category *DocumentCategory `gorm:"foreignKey:CategoryID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"category,omitempty"`
+	Previous *Document         `gorm:"foreignKey:PreviousID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"previous,omitempty"`
+	Original *Document         `gorm:"foreignKey:OriginalID;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;" json:"original,omitempty"`
 
 	// Reverse relationships
-	Newer    []Document        `gorm:"foreignKey:PreviousID" json:"newer,omitempty"`    // Documents that have this one as previous
-	Versions []Document        `gorm:"foreignKey:OriginalID" json:"versions,omitempty"` // All versions of this document
-	Category *DocumentCategory `gorm:"foreignKey:CategoryID" json:"category,omitempty"`
-
-	// Audit trail relationship
+	Newer     []Document         `gorm:"foreignKey:PreviousID" json:"newer,omitempty"`
+	Versions  []Document         `gorm:"foreignKey:OriginalID" json:"versions,omitempty"`
 	AuditLogs []DocumentAuditLog `gorm:"foreignKey:DocumentID" json:"audit_logs,omitempty"`
+
+	// NEW: Reverse relationships to join tables (for querying convenience)
+	ApplicantDocuments   []ApplicantDocument   `gorm:"foreignKey:DocumentID" json:"applicant_documents,omitempty"`
+	ApplicationDocuments []ApplicationDocument `gorm:"foreignKey:DocumentID" json:"application_documents,omitempty"`
+	StandDocuments       []StandDocument       `gorm:"foreignKey:DocumentID" json:"stand_documents,omitempty"`
+	ProjectDocuments     []ProjectDocument     `gorm:"foreignKey:DocumentID" json:"project_documents,omitempty"`
+	CommentDocuments     []CommentDocument     `gorm:"foreignKey:DocumentID" json:"comment_documents,omitempty"`
+	PaymentDocuments     []PaymentDocument     `gorm:"foreignKey:DocumentID" json:"payment_documents,omitempty"`
+	EmailDocuments       []EmailDocument       `gorm:"foreignKey:DocumentID" json:"email_documents,omitempty"`
+	BankDocuments        []BankDocument        `gorm:"foreignKey:DocumentID" json:"bank_documents,omitempty"`
+	UserDocuments        []UserDocument        `gorm:"foreignKey:DocumentID" json:"user_documents,omitempty"`
 
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
@@ -112,16 +119,16 @@ type Document struct {
 
 // DocumentAuditLog tracks all changes made to documents
 type DocumentAuditLog struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
-	DocumentID uuid.UUID  `gorm:"type:uuid;not null;index" json:"document_id"`
-	Action     ActionType `gorm:"type:varchar(20);not null" json:"action"`
-	UserID     string     `gorm:"not null" json:"user_id"`
-	UserName   *string    `json:"user_name"`
-	UserRole   *string    `json:"user_role"`
-	Reason     *string    `gorm:"type:text" json:"reason"`
-	Details    *string    `gorm:"type:text" json:"details"`
-	IPAddress  *string    `json:"ip_address"`
-	UserAgent  *string    `json:"user_agent"`
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	Action     Action    `gorm:"type:varchar(20);not null" json:"action"`
+	UserID     string    `gorm:"not null" json:"user_id"`
+	UserName   *string   `json:"user_name"`
+	UserRole   *string   `json:"user_role"`
+	Reason     *string   `gorm:"type:text" json:"reason"`
+	Details    *string   `gorm:"type:text" json:"details"`
+	IPAddress  *string   `json:"ip_address"`
+	UserAgent  *string   `json:"user_agent"`
 
 	// Document state before/after change
 	OldFileName    *string    `json:"old_file_name"`
@@ -144,34 +151,180 @@ type DocumentAuditLog struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
-type DocumentVersion struct {
-	ID               uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	BaseDocumentID   uuid.UUID `gorm:"type:uuid;not null;index" json:"base_document_id"`
-	DocumentID       uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
-	Version          int       `gorm:"not null" json:"version"`
-	FileName         string    `gorm:"not null" json:"file_name"`
-	FileSize         int64     `gorm:"not null" json:"file_size"`
-	FileHash         string    `gorm:"not null" json:"file_hash"`
-	IsCurrentVersion bool      `gorm:"not null;index" json:"is_current_version"`
-	CreatedBy        string    `gorm:"not null" json:"created_by"`
-	UpdateReason     *string   `gorm:"type:text" json:"update_reason"`
-	CreatedAt        time.Time `gorm:"autoCreateTime" json:"created_at"`
+// ====================
+// JOIN TABLE MODELS
+// ====================
 
-	Document *Document `gorm:"foreignKey:DocumentID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"document,omitempty"`
-	Base     *Document `gorm:"foreignKey:BaseDocumentID;references:ID;constraint:OnUpdate:CASCADE,OnDelete:CASCADE;" json:"base,omitempty"`
+// ApplicantDocument represents the relationship between applicants and documents
+type ApplicantDocument struct {
+	ID            uuid.UUID  `gorm:"type:uuid;primary_key;" json:"id"`
+	ApplicantID   uuid.UUID  `gorm:"type:uuid;not null;index" json:"applicant_id"`
+	ApplicationID *uuid.UUID `gorm:"type:uuid;index" json:"application_id"`
+	DocumentID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy     string     `json:"created_by"`
+	CreatedAt     time.Time  `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Applicant   Applicant    `gorm:"foreignKey:ApplicantID;constraint:OnDelete:CASCADE" json:"applicant"`
+	Application *Application `gorm:"foreignKey:ApplicationID;constraint:OnDelete:CASCADE" json:"application,omitempty"`
+	Document    Document     `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
 }
 
-// BeforeCreate hooks for UUID generation
+// ApplicationDocument represents the relationship between applications and documents
+type ApplicationDocument struct {
+	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ApplicationID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
+	DocumentID    uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy     string    `json:"created_by"`
+	CreatedAt     time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Application Application `gorm:"foreignKey:ApplicationID;constraint:OnDelete:CASCADE" json:"application"`
+	Document    Document    `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+// StandDocument represents the relationship between stands and documents
+type StandDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	StandID    uuid.UUID `gorm:"type:uuid;not null;index" json:"stand_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Stand    Stand    `gorm:"foreignKey:StandID;constraint:OnDelete:CASCADE" json:"stand"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+// ProjectDocument represents the relationship between projects and documents
+type ProjectDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	ProjectID  uuid.UUID `gorm:"type:uuid;not null;index" json:"project_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Project  Project  `gorm:"foreignKey:ProjectID;constraint:OnDelete:CASCADE" json:"project"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+// PaymentPlanDocument represents the relationship between payment plans and documents
+type CommentDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	CommentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"comment_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Comment  Comment  `gorm:"foreignKey:CommentID;constraint:OnDelete:CASCADE" json:"comment"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+type BankDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	BankID     uuid.UUID `gorm:"type:uuid;not null;index" json:"bank_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Bank     Bank     `gorm:"foreignKey:BankID;constraint:OnDelete:CASCADE" json:"bank"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+type UserDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	UserID     uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	User     User     `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"user"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
+}
+
+// ====================
+// Business Logic Methods
+// ====================
+
+// Get document display name
+func (d *Document) GetDisplayName() string {
+	if d.Description != nil && *d.Description != "" {
+		return *d.Description
+	}
+	return d.FileName
+}
+
+// Check if document is the latest version
+func (d *Document) IsLatestVersion() bool {
+	return d.IsCurrentVersion
+}
+
+// Get version information
+func (d *Document) GetVersionInfo() string {
+	if d.OriginalID != nil && *d.OriginalID != d.ID {
+		return fmt.Sprintf("Version %d of document", d.Version)
+	}
+	return "Original document"
+}
+
+// Check if document can be updated
+func (d *Document) CanBeUpdated() bool {
+	return d.IsActive && d.IsCurrentVersion
+}
+
+// Check if document can be deleted
+func (d *Document) CanBeDeleted() bool {
+	// Can only delete if no other versions depend on it
+	return len(d.Newer) == 0 && d.IsCurrentVersion
+}
+
+// Get file extension
+func (d *Document) GetFileExtension() string {
+	if len(d.FileName) > 0 {
+		if idx := strings.LastIndex(d.FileName, "."); idx != -1 {
+			return d.FileName[idx+1:]
+		}
+	}
+	return ""
+}
+
+// Check if document is an image
+func (d *Document) IsImage() bool {
+	return d.DocumentType == ImageType
+}
+
+// Check if document is a PDF
+func (d *Document) IsPDF() bool {
+	return d.DocumentType == PDFType
+}
+
+// Get file size in human readable format
+func (d *Document) GetHumanReadableSize() string {
+	size := d.FileSize.InexactFloat64()
+	const unit = 1000
+	if size < unit {
+		return fmt.Sprintf("%.0f B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", size/float64(div), "kMGTPE"[exp])
+}
+
+// BeforeCreate hooks
 func (d *Document) BeforeCreate(tx *gorm.DB) error {
 	if d.ID == uuid.Nil {
 		d.ID = uuid.New()
 	}
-
-	// Set original ID for the first version to point to itself
 	if d.OriginalID == nil {
 		d.OriginalID = &d.ID
 	}
-
 	return nil
 }
 
@@ -189,9 +342,45 @@ func (dal *DocumentAuditLog) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-func (dv *DocumentVersion) BeforeCreate(tx *gorm.DB) error {
-	if dv.ID == uuid.Nil {
-		dv.ID = uuid.New()
+func (appDoc *ApplicationDocument) BeforeCreate(tx *gorm.DB) error {
+	if appDoc.ID == uuid.Nil {
+		appDoc.ID = uuid.New()
+	}
+	return nil
+}
+
+func (sd *StandDocument) BeforeCreate(tx *gorm.DB) error {
+	if sd.ID == uuid.Nil {
+		sd.ID = uuid.New()
+	}
+	return nil
+}
+
+func (pd *ProjectDocument) BeforeCreate(tx *gorm.DB) error {
+	if pd.ID == uuid.Nil {
+		pd.ID = uuid.New()
+	}
+	return nil
+}
+
+func (cd *CommentDocument) BeforeCreate(tx *gorm.DB) error {
+	if cd.ID == uuid.Nil {
+		cd.ID = uuid.New()
+	}
+	return nil
+}
+
+// Add BeforeCreate hooks
+func (bd *BankDocument) BeforeCreate(tx *gorm.DB) error {
+	if bd.ID == uuid.Nil {
+		bd.ID = uuid.New()
+	}
+	return nil
+}
+
+func (ud *UserDocument) BeforeCreate(tx *gorm.DB) error {
+	if ud.ID == uuid.Nil {
+		ud.ID = uuid.New()
 	}
 	return nil
 }

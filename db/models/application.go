@@ -179,12 +179,12 @@ type Application struct {
 	FinalApproverID *uuid.UUID `gorm:"type:uuid;index" json:"final_approver_id"`
 
 	// Relationships
-	Applicant Applicant  `gorm:"foreignKey:ApplicantID" json:"applicant"`
-	Tariff    *Tariff    `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
-	VATRate   *VATRate   `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
-	Stand     *Stand     `gorm:"foreignKey:StandID" json:"stand,omitempty"`
-	Documents []Document `gorm:"foreignKey:ApplicationID" json:"documents,omitempty"`
-	Payment   Payment    `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
+	Applicant            Applicant             `gorm:"foreignKey:ApplicantID" json:"applicant"`
+	Tariff               *Tariff               `gorm:"foreignKey:TariffID" json:"tariff,omitempty"`
+	VATRate              *VATRate              `gorm:"foreignKey:VATRateID" json:"vat_rate,omitempty"`
+	Stand                *Stand                `gorm:"foreignKey:StandID" json:"stand,omitempty"`
+	ApplicationDocuments []ApplicationDocument `gorm:"foreignKey:ApplicationID" json:"application_documents,omitempty"`
+	Payment              Payment               `gorm:"foreignKey:ApplicationID" json:"payment,omitempty"`
 
 	// New approval group relationships
 	GroupAssignments []ApplicationGroupAssignment `gorm:"foreignKey:ApplicationID" json:"group_assignments,omitempty"`

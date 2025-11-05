@@ -337,7 +337,7 @@ func (sc *StandController) BulkUploadStands(c *fiber.Ctx) error {
 			} else {
 				active := true
 				emailLog := models.EmailLog{
-					ID:             uuid.New().String(),
+					ID:             uuid.New(),
 					Recipient:      userEmail,
 					Subject:        subject,
 					Message:        message,

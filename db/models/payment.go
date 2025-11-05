@@ -89,11 +89,27 @@ type Payment struct {
 	PaymentDate       time.Time     `gorm:"not null" json:"payment_date"`
 	Notes             string        `json:"notes,omitempty"`
 
+	// NEW: Document relationships using join tables
+	PaymentDocuments []PaymentDocument `gorm:"foreignKey:PaymentID" json:"payment_documents,omitempty"`
+
 	// Audit trail
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 	CreatedBy string    `gorm:"not null" json:"created_by"`
 	UpdatedBy *string   `json:"updated_by"`
+}
+
+// PaymentDocument represents the relationship between payments and documents
+type PaymentDocument struct {
+	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	PaymentID  uuid.UUID `gorm:"type:uuid;not null;index" json:"payment_id"`
+	DocumentID uuid.UUID `gorm:"type:uuid;not null;index" json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
+	CreatedAt  time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Payment  Payment  `gorm:"foreignKey:PaymentID;constraint:OnDelete:CASCADE" json:"payment"`
+	Document Document `gorm:"foreignKey:DocumentID;constraint:OnDelete:CASCADE" json:"document"`
 }
 
 // Automatically generate UUID and TransactionNumber before saving
@@ -116,4 +132,12 @@ func (p *Payment) BeforeCreate(tx *gorm.DB) (err error) {
 	}
 
 	return
+}
+
+// BeforeCreate hook for PaymentDocument
+func (pd *PaymentDocument) BeforeCreate(tx *gorm.DB) error {
+	if pd.ID == uuid.Nil {
+		pd.ID = uuid.New()
+	}
+	return nil
 }

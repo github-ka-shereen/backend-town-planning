@@ -210,7 +210,7 @@ func (sc *StandController) BulkUploadProjects(c *fiber.Ctx) error {
 				active := true
 				// Log the email sent to the database
 				emailLog := models.EmailLog{
-					ID:             uuid.New().String(),
+					ID:             uuid.New(),
 					Recipient:      userEmail,
 					Subject:        subject,
 					Message:        message,

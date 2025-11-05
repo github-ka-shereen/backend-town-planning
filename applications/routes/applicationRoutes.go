@@ -4,6 +4,7 @@ import (
 	controllers "town-planning-backend/applications/controllers"
 	repositories "town-planning-backend/applications/repositories"
 	indexing_repository "town-planning-backend/bleve/repositories"
+	documents_services "town-planning-backend/documents/services"
 	user_repository "town-planning-backend/users/repositories"
 
 	"github.com/gofiber/fiber/v2"
@@ -16,12 +17,14 @@ func ApplicationRouterInit(
 	applicationRepository repositories.ApplicationRepository,
 	bleveRepository indexing_repository.BleveRepositoryInterface,
 	userRepo user_repository.UserRepository,
+	documentService *documents_services.DocumentService,
 ) {
 	applicationController := &controllers.ApplicationController{
 		ApplicationRepo: applicationRepository,
 		DB:              db,
 		BleveRepo:       bleveRepository,
 		UserRepo:        userRepo,
+		DocumentSvc:     documentService,
 	}
 
 	applicationRoutes := app.Group("/api/v1")
@@ -43,7 +46,6 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/create-application", applicationController.CreateApplicationController)
 	applicationRoutes.Get("/filtered-applications", applicationController.GetFilteredApplicationsController)
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
-
 
 	// New comprehensive update endpoint - updates ALL fields
 	applicationRoutes.Put("/applications/:id", applicationController.UpdateApplicationDetailsController)
