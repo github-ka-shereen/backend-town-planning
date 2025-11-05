@@ -246,14 +246,14 @@ func (elc *EnhancedLoginController) initiateTwoFactor(c *fiber.Ctx, user *models
 // completeLogin finalizes the authentication process
 func (elc *EnhancedLoginController) completeLogin(c *fiber.Ctx, user *models.User, deviceFingerprint services.DeviceFingerprint, isTrustedDevice bool) error {
 	// Generate access token
-	accessToken, err := elc.pasetoMaker.CreateToken(user.ID.String(), 24*time.Hour)
+	accessToken, err := elc.pasetoMaker.CreateToken(user.ID, 24*time.Hour)
 	if err != nil {
 		return elc.sendErrorResponse(c, fiber.StatusInternalServerError, "Failed to create session", err)
 	}
 
 	// Register device if not already trusted
 	if !isTrustedDevice {
-		_, err = elc.deviceService.RegisterDevice(user.ID.String(), deviceFingerprint)
+		_, err = elc.deviceService.RegisterDevice(user.ID.String(), deviceFingerprint) // Keep as String() for device service if it expects string
 		if err != nil {
 			config.Logger.Error("Failed to register device", zap.Error(err))
 		}

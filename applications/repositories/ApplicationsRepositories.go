@@ -2,37 +2,62 @@
 package repositories
 
 import (
+	"fmt"
 	"strings"
 	"time"
+	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 
 	"github.com/google/uuid"
+	"github.com/shopspring/decimal"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
 type ApplicationRepository interface {
+	// Development Category methods
 	CreateDevelopmentCategory(category *models.DevelopmentCategory) (*models.DevelopmentCategory, error)
 	GetDevelopmentCategoryByName(name string) (*models.DevelopmentCategory, error)
 	GetFilteredDevelopmentCategories(pageSize, offset int, filters map[string]string) ([]models.DevelopmentCategory, int64, error)
 	GetAllDevelopmentCategories(isActive *bool) ([]models.DevelopmentCategory, error)
 
-	// Tariff methods (optional - you can use the controller helpers instead)
+	// Tariff methods
 	CreateTariff(tariff *models.Tariff) (*models.Tariff, error)
 	GetActiveTariffForCategory(developmentCategoryID string) (*models.Tariff, error)
 	DeactivateTariff(tariffID string, updatedBy string) (*models.Tariff, error)
 	GetFilteredDevelopmentTariffs(limit, offset int, filters map[string]string) ([]models.Tariff, int64, error)
 	GetTariffByID(tariffID string) (*models.Tariff, error)
+
+	// Application query methods
 	GetFilteredApplications(limit, offset int, filters map[string]string) ([]models.Application, int64, error)
 	GetApplicationById(applicationID string) (*models.Application, error)
+	GetApplicationForUpdate(applicationID string) (*models.Application, error)
+	GetApplicationsByStatus(status models.ApplicationStatus, limit, offset int) ([]models.Application, int64, error)
+
+	// Application update methods
+	UpdateApplication(tx *gorm.DB, applicationID uuid.UUID, updates map[string]interface{}) (*models.Application, error)
+	UpdateApplicationStatus(tx *gorm.DB, applicationID uuid.UUID, status models.ApplicationStatus, updatedBy string) error
+	UpdateApplicationArchitect(tx *gorm.DB, applicationID uuid.UUID, architectFullName *string, architectEmail *string, architectPhone *string, updatedBy string) error
+	UpdateApplicationDocumentFlags(tx *gorm.DB, applicationID uuid.UUID, documentFlags map[string]bool, updatedBy string) error
+	MarkApplicationAsCollected(tx *gorm.DB, applicationID uuid.UUID, collectedBy string, collectionDate *time.Time) error
+	ValidateApplicationForUpdate(applicationID uuid.UUID) error
+
+	// Cost calculation methods
+	RecalculateApplicationCosts(tx *gorm.DB, applicationID uuid.UUID, tariffID uuid.UUID, vatRateID uuid.UUID, planArea decimal.Decimal) (*CostCalculation, error)
+
+	// Approval group methods
 	CreateApprovalGroup(tx *gorm.DB, group *models.ApprovalGroup) (*models.ApprovalGroup, error)
 	GetApprovalGroupWithMembers(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 	GetApprovalGroups(db *gorm.DB) ([]models.ApprovalGroup, error)
 	GetApprovalGroupByID(db *gorm.DB, groupID string) (*models.ApprovalGroup, error)
 	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
+
+	// Approval workflow methods
 	GetDataForApplicationApproval(applicationID string) (map[string]interface{}, error)
 	ProcessApplicationApproval(tx *gorm.DB, applicationID string, userID uuid.UUID, comment *string, commentType models.CommentType) (*ApprovalResult, error)
 	ProcessApplicationRejection(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string, comment *string, commentType models.CommentType) (*RejectionResult, error)
 	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
+	AssignApplicationToGroup(tx *gorm.DB, applicationID string, groupID uuid.UUID, assignedBy string, reassignReason *string, userUUID uuid.UUID) (*models.ApplicationGroupAssignment, error)
 }
 
 type applicationRepository struct {
@@ -41,6 +66,101 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
 	return &applicationRepository{db: db}
+}
+
+// AssignApplicationToGroup assigns or reassigns an application to an approval group for review
+func (r *applicationRepository) AssignApplicationToGroup(tx *gorm.DB, applicationID string, groupID uuid.UUID, assignedBy string, reassignReason *string, userUUID uuid.UUID) (*models.ApplicationGroupAssignment, error) {
+	// Fetch the application and group to validate
+	var application models.Application
+	var group models.ApprovalGroup
+
+	if err := tx.Where("id = ?", applicationID).First(&application).Error; err != nil {
+		return nil, fmt.Errorf("application not found: %w", err)
+	}
+
+	if err := tx.Where("id = ?", groupID).First(&group).Error; err != nil {
+		return nil, fmt.Errorf("approval group not found: %w", err)
+	}
+
+	// Check for existing active assignment
+	var existingAssignment models.ApplicationGroupAssignment
+
+	if err := tx.Where("application_id = ? AND is_active = ?", applicationID, true).First(&existingAssignment).Error; err == nil {
+
+		completedAt := time.Now()
+		// Deactivate the existing assignment
+		existingAssignment.IsActive = false
+		existingAssignment.CompletedAt = &completedAt
+		if err := tx.Save(&existingAssignment).Error; err != nil {
+			return nil, fmt.Errorf("failed to deactivate existing assignment: %w", err)
+		}
+
+		// Create a comment about the reassignment
+		comment := models.Comment{
+			ID:            uuid.New(),
+			ApplicationID: application.ID,
+			CommentType:   models.CommentTypeGeneral,
+			Content: fmt.Sprintf("Application reassigned from group '%s' to '%s'. Reason: %s",
+				existingAssignment.Group.Name, group.Name,
+				reassignReasonOrDefault(reassignReason)),
+			UserID:    userUUID,
+			CreatedBy: assignedBy,
+		}
+		if err := tx.Create(&comment).Error; err != nil {
+			// Log but don't fail the operation
+			config.Logger.Warn("Failed to create reassignment comment", zap.Error(err))
+		}
+	}
+
+	// Count active group members for the new group
+	var memberCount int64
+	if err := tx.Model(&models.ApprovalGroupMember{}).
+		Where("approval_group_id = ? AND is_active = ?", groupID, true).
+		Count(&memberCount).Error; err != nil {
+		return nil, fmt.Errorf("failed to count group members: %w", err)
+	}
+
+	// Create the new assignment
+	assignment := models.ApplicationGroupAssignment{
+		ID:                    uuid.New(),
+		ApplicationID:         application.ID,
+		ApprovalGroupID:       groupID,
+		IsActive:              true,
+		AssignedAt:            time.Now(),
+		AssignedBy:            assignedBy,
+		TotalMembers:          int(memberCount),
+		AvailableMembers:      int(memberCount),
+		PendingCount:          int(memberCount),
+		ApprovedCount:         0, // Reset counters for new assignment
+		RejectedCount:         0,
+		IssuesRaised:          0,
+		IssuesResolved:        0,
+		ReadyForFinalApproval: false,
+		UsedBackupMembers:     false,
+	}
+
+	if err := tx.Create(&assignment).Error; err != nil {
+		return nil, fmt.Errorf("failed to create group assignment: %w", err)
+	}
+
+	// Update application's assigned group and status
+	updates := map[string]interface{}{
+		"assigned_group_id": groupID,
+		"status":            models.UnderReviewApplication,
+	}
+
+	if err := tx.Model(&application).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("failed to update application: %w", err)
+	}
+
+	return &assignment, nil
+}
+
+func reassignReasonOrDefault(reason *string) string {
+	if reason != nil && *reason != "" {
+		return *reason
+	}
+	return "No reason provided"
 }
 
 // CreateApprovalGroup creates a new approval group with its members

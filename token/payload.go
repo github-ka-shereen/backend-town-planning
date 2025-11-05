@@ -12,15 +12,15 @@ import (
 var ErrExpired = errors.New("token has expired")
 
 type Payload struct {
-	ID        uuid.UUID `json:"id"`
-	Email     string    `json:"email"`
+	ID        uuid.UUID `json:"id"`         // Token ID
+	UserID    uuid.UUID `json:"user_id"`    // User identifier
 	IssuedAt  time.Time `json:"issued_at"`
 	ExpiredAt time.Time `json:"expired_at"`
 }
 
-func NewPayload(email string, duration time.Duration) (*Payload, error) {
-	if email == "" {
-		return nil, errors.New("email cannot be empty")
+func NewPayload(userID uuid.UUID, duration time.Duration) (*Payload, error) {
+	if userID == uuid.Nil {
+		return nil, errors.New("user ID cannot be empty")
 	}
 	if duration <= 0 {
 		return nil, errors.New("duration must be positive")
@@ -32,12 +32,12 @@ func NewPayload(email string, duration time.Duration) (*Payload, error) {
 	}
 
 	// Use utils.DateLocation to convert to the app's timezone
-	issuedAt := time.Now().In(utils.DateLocation) // Convert to the app's timezone
+	issuedAt := time.Now().In(utils.DateLocation)
 	expiredAt := issuedAt.Add(duration)
 
 	payload := &Payload{
 		ID:        tokenID,
-		Email:     email,
+		UserID:    userID,
 		IssuedAt:  issuedAt,
 		ExpiredAt: expiredAt,
 	}
@@ -53,5 +53,6 @@ func (payload *Payload) Valid() error {
 }
 
 func (p *Payload) String() string {
-	return fmt.Sprintf("ID: %s, Email: %s, IssuedAt: %s, ExpiredAt: %s", p.ID, p.Email, p.IssuedAt, p.ExpiredAt)
+	return fmt.Sprintf("ID: %s, UserID: %s, IssuedAt: %s, ExpiredAt: %s", 
+		p.ID, p.UserID, p.IssuedAt, p.ExpiredAt)
 }

@@ -46,7 +46,7 @@ func (elc *EnhancedLoginController) VerifyMagicLink(c *fiber.Ctx) error {
 	}
 
 	// Generate session tokens
-	accessToken, err := elc.pasetoMaker.CreateToken(user.ID.String(), 24*time.Hour)
+	accessToken, err := elc.pasetoMaker.CreateToken(user.ID, 24*time.Hour)
 	if err != nil {
 		config.Logger.Error("Failed to generate access token",
 			zap.String("userID", user.ID.String()),
@@ -55,7 +55,7 @@ func (elc *EnhancedLoginController) VerifyMagicLink(c *fiber.Ctx) error {
 		return elc.sendErrorResponse(c, fiber.StatusInternalServerError, "Failed to create session", err)
 	}
 
-	refreshToken, err := elc.pasetoMaker.CreateToken(user.ID.String(), 7*24*time.Hour)
+	refreshToken, err := elc.pasetoMaker.CreateToken(user.ID, 7*24*time.Hour)
 	if err != nil {
 		config.Logger.Error("Failed to generate refresh token",
 			zap.String("userID", user.ID.String()),

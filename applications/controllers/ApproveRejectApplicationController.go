@@ -70,24 +70,7 @@ func (ac *ApplicationController) ApproveRejectApplicationController(c *fiber.Ctx
 		})
 	}
 
-	userEmail := payload.Email
-
-	user, err := ac.UserRepo.GetUserByEmail(userEmail)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Internal server error: Could not retrieve user",
-			"error":   err.Error(),
-		})
-	}
-
-	userUUID, err := uuid.Parse(user.ID.String())
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Invalid user ID format",
-		})
-	}
+	userUUID := payload.UserID
 
 	// --- Start Database Transaction ---
 	tx := ac.DB.Begin()

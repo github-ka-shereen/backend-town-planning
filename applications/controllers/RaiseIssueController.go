@@ -7,7 +7,6 @@ import (
 	"town-planning-backend/token"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/google/uuid"
 	"go.uber.org/zap"
 )
 
@@ -62,7 +61,6 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		})
 	}
 
-	// Get user from context
 	// Get user from context (set by authentication middleware)
 	payload, ok := c.Locals("user").(*token.Payload)
 	if !ok || payload == nil {
@@ -72,24 +70,10 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		})
 	}
 
-	userEmail := payload.Email
+	config.Logger.Info("User authenticated",
+		zap.Any("payload", payload))
 
-	user, err := ac.UserRepo.GetUserByEmail(userEmail)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"success": false,
-			"message": "Internal server error: Could not retrieve user",
-			"error":   err.Error(),
-		})
-	}
-
-	userUUID, err := uuid.Parse(user.ID.String())
-	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Invalid user ID format",
-		})
-	}
+	userUUID := payload.UserID
 
 	// --- Start Database Transaction ---
 	tx := ac.DB.Begin()

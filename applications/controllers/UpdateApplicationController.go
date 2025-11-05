@@ -1,18 +1,12 @@
+// controllers/application_update_controller.go
 package controllers
 
 import (
-	"crypto/md5"
-	"encoding/hex"
 	"fmt"
-	"io"
-	"mime/multipart"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
-	"town-planning-backend/utils"
+	"town-planning-backend/token"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -21,29 +15,79 @@ import (
 	"gorm.io/gorm"
 )
 
-// UpdateApplicationRequest defines the request structure for updating an application
+// UpdateApplicationRequest defines the structure for application updates (from existing controller)
 type UpdateApplicationRequest struct {
-	ReceiptNumber string    `json:"receipt_number"`
-	ReceiptDate   time.Time `json:"receipt_date"`
-	UpdatedBy     string    `json:"updated_by"`
+	ReceiptNumber string    `json:"receipt_number" form:"receipt_number"`
+	ReceiptDate   time.Time `json:"receipt_date" form:"receipt_date"`
+	UpdatedBy     string    `json:"updated_by" form:"updated_by"`
+
+	// Document flags
+	ProcessedReceiptProvided                 *bool `json:"processed_receipt_provided" form:"processed_receipt_provided"`
+	InitialPlanProvided                      *bool `json:"initial_plan_provided" form:"initial_plan_provided"`
+	ProcessedTPD1FormProvided                *bool `json:"processed_tpd1_form_provided" form:"processed_tpd1_form_provided"`
+	ProcessedQuotationProvided               *bool `json:"processed_quotation_provided" form:"processed_quotation_provided"`
+	StructuralEngineeringCertificateProvided *bool `json:"structural_engineering_certificate_provided" form:"structural_engineering_certificate_provided"`
+	RingBeamCertificateProvided              *bool `json:"ring_beam_certificate_provided" form:"ring_beam_certificate_provided"`
 }
 
-// DocumentUpload represents a file that needs to be processed
-type DocumentUpload struct {
-	FileHeader  *multipart.FileHeader
-	DocType     models.DocumentType
-	Description string
-	IsMandatory bool
-	FlagField   string
-	FileContent []byte
-	FileName    string
-	PublicPath  string
-	FullPath    string
+// UpdateApplicationDetailsRequest defines the comprehensive update structure
+type UpdateApplicationDetailsRequest struct {
+	// Architect Information
+	ArchitectFullName    *string `json:"architect_full_name"`
+	ArchitectEmail       *string `json:"architect_email"`
+	ArchitectPhoneNumber *string `json:"architect_phone_number"`
+
+	// Planning Details
+	PlanArea *decimal.Decimal `json:"plan_area"`
+
+	// Property References
+	PropertyTypeID *uuid.UUID `json:"property_type_id"`
+	StandID        *uuid.UUID `json:"stand_id"`
+
+	// Tariff and Financial
+	TariffID      *uuid.UUID       `json:"tariff_id"`
+	VATRateID     *uuid.UUID       `json:"vat_rate_id"`
+	EstimatedCost *decimal.Decimal `json:"estimated_cost"`
+
+	// Payment Information
+	ReceiptNumber *string    `json:"receipt_number"`
+	ReceiptDate   *time.Time `json:"receipt_date"`
+
+	// Status Updates
+	Status            *models.ApplicationStatus `json:"status"`
+	PaymentStatus     *models.PaymentStatus     `json:"payment_status"`
+	IsCollected       *bool                     `json:"is_collected"`
+	CollectedBy       *string                   `json:"collected_by"`
+	CollectionDate    *time.Time                `json:"collection_date"`
+	FinalApprovalDate *time.Time                `json:"final_approval_date"`
+
+	// Approval Group Assignment
+	AssignedGroupID *uuid.UUID `json:"assigned_group_id"`
+	FinalApproverID *uuid.UUID `json:"final_approver_id"`
+
+	// Document Flags (if updating document status separately)
+	ProcessedReceiptProvided                 *bool `json:"processed_receipt_provided"`
+	InitialPlanProvided                      *bool `json:"initial_plan_provided"`
+	ProcessedTPD1FormProvided                *bool `json:"processed_tpd1_form_provided"`
+	ProcessedQuotationProvided               *bool `json:"processed_quotation_provided"`
+	StructuralEngineeringCertificateProvided *bool `json:"structural_engineering_certificate_provided"`
+	RingBeamCertificateProvided              *bool `json:"ring_beam_certificate_provided"`
 }
 
-// UpdateApplicationController handles updating application details and document uploads
-func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error {
+// UpdateApplicationDetailsController handles comprehensive application updates
+func (ac *ApplicationController) UpdateApplicationDetailsController(c *fiber.Ctx) error {
 	applicationID := c.Params("id")
+
+	// Get authenticated user
+	payload, ok := c.Locals("user").(*token.Payload)
+	if !ok || payload == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not authenticated",
+		})
+	}
+
+	userUUID := payload.UserID
 
 	// Validate application ID
 	if applicationID == "" {
@@ -68,32 +112,18 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 		})
 	}
 
-	// Parse form data FIRST - before transaction
-	form, err := c.MultipartForm()
-	if err != nil {
-		config.Logger.Error("Failed to parse multipart form", zap.Error(err))
+	// Parse request body
+	var req UpdateApplicationDetailsRequest
+	if err := c.BodyParser(&req); err != nil {
+		config.Logger.Error("Failed to parse request body", zap.Error(err))
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"message": "Invalid form data",
-			"error":   "invalid_form_data",
+			"message": "Invalid request body",
+			"error":   err.Error(),
 		})
 	}
 
-	// Extract basic fields
-	var req UpdateApplicationRequest
-	if receiptNumbers, exists := form.Value["receipt_number"]; exists && len(receiptNumbers) > 0 {
-		req.ReceiptNumber = receiptNumbers[0]
-	}
-	if receiptDates, exists := form.Value["receipt_date"]; exists && len(receiptDates) > 0 {
-		if parsedDate, err := time.Parse(time.RFC3339, receiptDates[0]); err == nil {
-			req.ReceiptDate = parsedDate
-		}
-	}
-	if updatedBys, exists := form.Value["updated_by"]; exists && len(updatedBys) > 0 {
-		req.UpdatedBy = updatedBys[0]
-	}
-
-	// Start transaction - AFTER parsing form data
+	// Start transaction
 	tx := ac.DB.Session(&gorm.Session{}).WithContext(c.Context()).Begin()
 	if tx.Error != nil {
 		config.Logger.Error("Failed to start transaction", zap.Error(tx.Error))
@@ -104,32 +134,25 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 		})
 	}
 
-	txCommitted := false
-	var pendingFileUploads []DocumentUpload // Track files that need to be saved after commit
-
 	defer func() {
-		if !txCommitted {
-			// Transaction failed - rollback database changes
-			if tx != nil {
-				tx.Rollback()
-				config.Logger.Warn("Transaction rolled back due to error")
-			}
-			// DO NOT save any files to disk since transaction failed
-			config.Logger.Info("Cleaning up - no files saved to disk due to transaction failure")
-		} else {
-			// Transaction succeeded - now save files to disk
-			ac.savePendingFilesToDisk(pendingFileUploads)
+		if r := recover(); r != nil {
+			tx.Rollback()
+			config.Logger.Error("Transaction panic recovery", zap.Any("panic", r))
 		}
 	}()
 
-	// Get existing application with relationships
+	// Get existing application
 	var existingApplication models.Application
 	if err := tx.
+		Preload("Applicant").
+		Preload("Tariff").
+		Preload("Tariff.DevelopmentCategory").
+		Preload("VATRate").
 		Preload("Documents", "is_active = ?", true).
 		Preload("Payment").
-		Preload("Tariff").
 		First(&existingApplication, "id = ?", appUUID).Error; err != nil {
 
+		tx.Rollback()
 		if err == gorm.ErrRecordNotFound {
 			config.Logger.Error("Application not found", zap.String("applicationID", applicationID))
 			return c.Status(fiber.StatusNotFound).JSON(fiber.Map{
@@ -149,15 +172,149 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 		})
 	}
 
-	// Prepare application update - only update the updated_by field
-	applicationUpdate := map[string]interface{}{
-		"updated_by": req.UpdatedBy,
+	// Validate application can be updated (not collected or expired)
+	if err := ac.validateApplicationForUpdate(&existingApplication); err != nil {
+		tx.Rollback()
+		config.Logger.Error("Application cannot be updated",
+			zap.String("applicationID", applicationID),
+			zap.Error(err))
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": err.Error(),
+			"error":   "application_not_updatable",
+		})
 	}
 
-	// CREATE PAYMENT RECORD if receipt information is provided
-	if req.ReceiptNumber != "" && !req.ReceiptDate.IsZero() {
-		_, err := ac.createPaymentRecord(tx, &existingApplication, req, req.UpdatedBy)
+	// Build update map
+	updates := make(map[string]interface{})
+	updatedByStr := userUUID.String()
+	updates["updated_by"] = updatedByStr
+
+	// Update architect information
+	if req.ArchitectFullName != nil {
+		updates["architect_full_name"] = *req.ArchitectFullName
+	}
+	if req.ArchitectEmail != nil {
+		updates["architect_email"] = *req.ArchitectEmail
+	}
+	if req.ArchitectPhoneNumber != nil {
+		updates["architect_phone_number"] = *req.ArchitectPhoneNumber
+	}
+
+	// Update planning details
+	if req.PlanArea != nil {
+		updates["plan_area"] = req.PlanArea
+	}
+
+	// Update property references
+	if req.PropertyTypeID != nil {
+		updates["property_type_id"] = req.PropertyTypeID
+	}
+	if req.StandID != nil {
+		updates["stand_id"] = req.StandID
+	}
+
+	// Update financial details
+	if req.EstimatedCost != nil {
+		updates["estimated_cost"] = req.EstimatedCost
+	}
+
+	// Handle tariff change and recalculate costs
+	tariffChanged := false
+	if req.TariffID != nil && (existingApplication.TariffID == nil || *req.TariffID != *existingApplication.TariffID) {
+		updates["tariff_id"] = req.TariffID
+		tariffChanged = true
+	}
+
+	// Handle VAT rate change
+	vatRateChanged := false
+	if req.VATRateID != nil && (existingApplication.VATRateID == nil || *req.VATRateID != *existingApplication.VATRateID) {
+		updates["vat_rate_id"] = req.VATRateID
+		vatRateChanged = true
+	}
+
+	// Recalculate costs if tariff or VAT changed or plan area updated
+	if tariffChanged || vatRateChanged || req.PlanArea != nil {
+		if err := ac.recalculateApplicationCosts(tx, &existingApplication, updates, req); err != nil {
+			tx.Rollback()
+			config.Logger.Error("Failed to recalculate costs",
+				zap.String("applicationID", applicationID),
+				zap.Error(err))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to recalculate application costs",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	// Update status fields
+	if req.Status != nil {
+		updates["status"] = req.Status
+		ac.updateWorkflowTimestamps(updates, *req.Status, &existingApplication)
+	}
+
+	if req.PaymentStatus != nil {
+		updates["payment_status"] = req.PaymentStatus
+		if *req.PaymentStatus == models.PaidPayment {
+			now := time.Now()
+			updates["payment_completed_at"] = &now
+		}
+	}
+
+	// Update collection information
+	if req.IsCollected != nil {
+		updates["is_collected"] = req.IsCollected
+		if *req.IsCollected {
+			if req.CollectedBy != nil {
+				updates["collected_by"] = req.CollectedBy
+			}
+			if req.CollectionDate != nil {
+				updates["collection_date"] = req.CollectionDate
+			} else {
+				now := time.Now()
+				updates["collection_date"] = &now
+			}
+			// Auto-set status to COLLECTED if not already set
+			if req.Status == nil || *req.Status != models.CollectedApplication {
+				updates["status"] = models.CollectedApplication
+				ac.updateWorkflowTimestamps(updates, models.CollectedApplication, &existingApplication)
+			}
+		}
+	}
+
+	// Update approval dates
+	if req.FinalApprovalDate != nil {
+		updates["final_approval_date"] = req.FinalApprovalDate
+	}
+
+	// Update approval group assignments
+	if req.AssignedGroupID != nil {
+		updates["assigned_group_id"] = req.AssignedGroupID
+	}
+	if req.FinalApproverID != nil {
+		updates["final_approver_id"] = req.FinalApproverID
+	}
+
+	// Update document flags
+	ac.updateDocumentFlags(&existingApplication, updates, req)
+
+	// Check if all mandatory documents are provided
+	ac.updateAllDocumentsProvidedFlag(&existingApplication, updates)
+
+	// Check if ready for review (payment complete + all docs provided)
+	ac.updateReadyForReviewFlag(&existingApplication, updates)
+
+	// Create payment record if receipt information provided
+	if req.ReceiptNumber != nil && req.ReceiptDate != nil {
+		paymentReq := UpdateApplicationRequest{
+			ReceiptNumber: *req.ReceiptNumber,
+			ReceiptDate:   *req.ReceiptDate,
+			UpdatedBy:     updatedByStr,
+		}
+		_, err := ac.createPaymentRecord(tx, &existingApplication, paymentReq, updatedByStr)
 		if err != nil {
+			tx.Rollback()
 			config.Logger.Error("Failed to create payment record",
 				zap.String("applicationID", applicationID),
 				zap.Error(err))
@@ -169,89 +326,10 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 		}
 	}
 
-	// Document type mappings
-	documentConfigs := []struct {
-		formField    string
-		documentType models.DocumentType
-		flagField    string
-		description  string
-		isMandatory  bool
-	}{
-		{
-			formField:    "scanned_receipt",
-			documentType: models.ProcessedReceipt,
-			flagField:    "ScannedReceiptProvided",
-			description:  "Scanned receipt document",
-			isMandatory:  true,
-		},
-		{
-			formField:    "processed_tpd1_form",
-			documentType: models.ProcessedTPD1Form,
-			flagField:    "ScannedTPD1FormProvided",
-			description:  "Processed TPD-1 form",
-			isMandatory:  true,
-		},
-		{
-			formField:    "processed_quotation",
-			documentType: models.ProcessedDevelopmentPermitQuotation,
-			flagField:    "QuotationProvided",
-			description:  "Processed development permit quotation",
-			isMandatory:  true,
-		},
-		{
-			formField:    "scanned_initial_plan",
-			documentType: models.InitialPlanDocument,
-			flagField:    "ScannedInitialPlanProvided",
-			description:  "Scanned initial plan",
-			isMandatory:  true,
-		},
-		{
-			formField:    "structural_engineering_certificate",
-			documentType: models.StructuralEngineeringCertificateDocument,
-			flagField:    "StructuralEngineeringCertificateProvided",
-			description:  "Structural engineering certificate",
-			isMandatory:  false,
-		},
-		{
-			formField:    "ring_beam_certificate",
-			documentType: models.RingBeamCertificateDocument,
-			flagField:    "RingBeamCertificateProvided",
-			description:  "Ring beam certificate",
-			isMandatory:  false,
-		},
-	}
-
-	// Process file uploads - READ FILES INTO MEMORY but don't save to disk yet
-	for _, config := range documentConfigs {
-		if files, exists := form.File[config.formField]; exists && len(files) > 0 {
-			file := files[0]
-
-			// Process file upload - read into memory and prepare document record
-			documentUpload, _, err := ac.processDocumentUploadInMemory(tx, file, config.documentType, config.description, config.isMandatory, &existingApplication, req.UpdatedBy)
-			if err != nil {
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"success": false,
-					"message": fmt.Sprintf("Failed to process %s", config.formField),
-					"error":   err.Error(),
-				})
-			}
-
-			// Add to pending uploads (will be saved to disk after commit)
-			pendingFileUploads = append(pendingFileUploads, *documentUpload)
-
-			// Use the direct mapping function to get the correct database column name
-			databaseColumn := getDatabaseColumnName(config.flagField)
-			applicationUpdate[databaseColumn] = true
-
-			// config.Logger.Info("Document processed in memory, ready for commit",
-			// 	zap.String("fileName", documentUpload.FileName),
-			// 	zap.String("databaseColumn", databaseColumn))
-		}
-	}
-
-	// Update application record with document flags
-	if len(applicationUpdate) > 0 {
-		if err := tx.Model(&existingApplication).Updates(applicationUpdate).Error; err != nil {
+	// Apply updates to application
+	if len(updates) > 0 {
+		if err := tx.Model(&existingApplication).Updates(updates).Error; err != nil {
+			tx.Rollback()
 			config.Logger.Error("Failed to update application",
 				zap.String("applicationID", applicationID),
 				zap.Error(err))
@@ -263,7 +341,7 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 		}
 	}
 
-	// Commit transaction - if this succeeds, then we'll save files to disk
+	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		config.Logger.Error("Failed to commit transaction", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -272,157 +350,71 @@ func (ac *ApplicationController) UpdateApplicationController(c *fiber.Ctx) error
 			"error":   err.Error(),
 		})
 	}
-	txCommitted = true
 
 	config.Logger.Info("Application updated successfully",
 		zap.String("applicationID", applicationID),
-		zap.Any("updatedFields", applicationUpdate),
-		zap.Int("pendingFileUploads", len(pendingFileUploads)))
+		zap.String("updatedBy", updatedByStr),
+		zap.Int("fieldsUpdated", len(updates)))
+
+	// Reload application with updated data
+	if err := ac.DB.
+		Preload("Applicant").
+		Preload("Tariff").
+		Preload("Tariff.DevelopmentCategory").
+		Preload("VATRate").
+		First(&existingApplication, "id = ?", appUUID).Error; err != nil {
+		config.Logger.Warn("Failed to reload application after update", zap.Error(err))
+	}
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
 		"message": "Application updated successfully",
 		"data": fiber.Map{
-			"application_id":     existingApplication.ID,
-			"plan_number":        existingApplication.PlanNumber,
-			"updated_fields":     applicationUpdate,
-			"documents_uploaded": len(pendingFileUploads),
-			"updated_at":         time.Now().Format(time.RFC3339),
+			"application":    existingApplication,
+			"updated_fields": updates,
+			"updated_at":     time.Now().Format(time.RFC3339),
 		},
 	})
 }
 
-// processDocumentUploadInMemory processes file upload in memory and creates document record WITHOUT saving to disk
-func (ac *ApplicationController) processDocumentUploadInMemory(
-	tx *gorm.DB,
-	fileHeader *multipart.FileHeader,
-	docType models.DocumentType,
-	description string,
-	isMandatory bool,
+// validateApplicationForUpdate checks if application can be updated
+func (ac *ApplicationController) validateApplicationForUpdate(application *models.Application) error {
+	// Applications that are collected cannot be updated
+	if application.IsCollected {
+		return fmt.Errorf("application has been collected and cannot be modified")
+	}
+
+	// Applications that are expired cannot be updated
+	if application.Status == models.ExpiredApplication {
+		return fmt.Errorf("application has expired and cannot be modified")
+	}
+
+	return nil
+}
+
+// updateDocumentFlags updates document flag fields
+func (ac *ApplicationController) updateDocumentFlags(
 	application *models.Application,
-	createdBy string,
-) (*DocumentUpload, *models.Document, error) {
-
-	// Generate unique filename
-	fileExt := filepath.Ext(fileHeader.Filename)
-	cleanName := strings.TrimSuffix(fileHeader.Filename, fileExt)
-	cleanName = utils.CleanStringForFilename(cleanName)
-	timestamp := time.Now().Format("20060102_150405")
-	filename := fmt.Sprintf("%s_%s%s", cleanName, timestamp, fileExt)
-
-	// Define file paths
-	uploadDir := filepath.Join("public", "uploads", "development_permit_application_documents", application.ID.String())
-	fullPath := filepath.Join(uploadDir, filename)
-	publicPath := strings.TrimPrefix(fullPath, "public/")
-
-	// Read file content into memory
-	file, err := fileHeader.Open()
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to open uploaded file: %w", err)
+	updates map[string]interface{},
+	req UpdateApplicationDetailsRequest,
+) {
+	if req.ProcessedReceiptProvided != nil {
+		updates["processed_receipt_provided"] = *req.ProcessedReceiptProvided
 	}
-	defer file.Close()
-
-	fileContent, err := io.ReadAll(file)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to read file content: %w", err)
+	if req.InitialPlanProvided != nil {
+		updates["initial_plan_provided"] = *req.InitialPlanProvided
 	}
-
-	// FIX: Generate file hash from memory content, NOT from disk
-	fileHash, err := generateFileHashFromBytes(fileContent)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to generate file hash: %w", err)
+	if req.ProcessedTPD1FormProvided != nil {
+		updates["processed_tpd1_form_provided"] = *req.ProcessedTPD1FormProvided
 	}
-
-	// Create document record (in database only - file not saved to disk yet)
-	document := models.Document{
-		ID:               uuid.New(),
-		ApplicationID:    &application.ID,
-		FileName:         filename,
-		DocumentType:     docType,
-		FileSize:         int64(len(fileContent)),
-		FilePath:         publicPath, // Store path without "public/" for frontend
-		FileHash:         fileHash,
-		MimeType:         fileHeader.Header.Get("Content-Type"),
-		IsPublic:         true, // Make documents publicly accessible
-		Description:      &description,
-		IsMandatory:      isMandatory,
-		IsActive:         true,
-		CreatedBy:        createdBy,
-		Version:          1,
-		IsCurrentVersion: true,
-		LastAction:       models.ActionCreate,
+	if req.ProcessedQuotationProvided != nil {
+		updates["processed_quotation_provided"] = *req.ProcessedQuotationProvided
 	}
-
-	// Set original ID to point to itself for the first version
-	document.OriginalID = &document.ID
-
-	if err := tx.Create(&document).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to create document record: %w", err)
+	if req.StructuralEngineeringCertificateProvided != nil {
+		updates["structural_engineering_certificate_provided"] = *req.StructuralEngineeringCertificateProvided
 	}
-
-	// Create audit log
-	auditLog := models.DocumentAuditLog{
-		ID:         uuid.New(),
-		DocumentID: document.ID,
-		Action:     models.ActionCreate,
-		UserID:     createdBy,
-		Reason:     &description,
-		Details:    &description,
-		CreatedAt:  time.Now(),
-	}
-
-	if err := tx.Create(&auditLog).Error; err != nil {
-		config.Logger.Warn("Failed to create document audit log",
-			zap.String("documentID", document.ID.String()),
-			zap.Error(err))
-	}
-
-	// Prepare document upload for later disk saving
-	documentUpload := &DocumentUpload{
-		FileHeader:  fileHeader,
-		DocType:     docType,
-		Description: description,
-		IsMandatory: isMandatory,
-		FileContent: fileContent,
-		FileName:    filename,
-		PublicPath:  publicPath,
-		FullPath:    fullPath,
-	}
-
-	return documentUpload, &document, nil
-}
-
-// Add this helper function to your controller file
-func generateFileHashFromBytes(fileContent []byte) (string, error) {
-	hash := md5.New()
-	hash.Write(fileContent)
-	hashInBytes := hash.Sum(nil)[:16]
-	return hex.EncodeToString(hashInBytes), nil
-}
-
-// savePendingFilesToDisk saves all pending file uploads to disk after successful transaction commit
-func (ac *ApplicationController) savePendingFilesToDisk(uploads []DocumentUpload) {
-	for _, upload := range uploads {
-		// Create directory if it doesn't exist
-		dir := filepath.Dir(upload.FullPath)
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			config.Logger.Error("Failed to create directory for file",
-				zap.String("dir", dir),
-				zap.Error(err))
-			continue
-		}
-
-		// Save file to disk
-		if err := os.WriteFile(upload.FullPath, upload.FileContent, 0644); err != nil {
-			config.Logger.Error("Failed to save file to disk",
-				zap.String("filePath", upload.FullPath),
-				zap.Error(err))
-			continue
-		}
-
-		config.Logger.Info("File saved to disk after successful transaction",
-			zap.String("filePath", upload.FullPath),
-			zap.Int("fileSize", len(upload.FileContent)))
+	if req.RingBeamCertificateProvided != nil {
+		updates["ring_beam_certificate_provided"] = *req.RingBeamCertificateProvided
 	}
 }
 
@@ -472,34 +464,170 @@ func (ac *ApplicationController) createPaymentRecord(
 	return &payment, nil
 }
 
-// // Helper function to convert CamelCase to snake_case
-// func toSnakeCase(str string) string {
-// 	var result strings.Builder
-// 	for i, char := range str {
-// 		if i > 0 && 'A' <= char && char <= 'Z' {
-// 			result.WriteByte('_')
-// 		}
-// 		result.WriteRune(char)
-// 	}
-// 	return strings.ToLower(result.String())
-// }
-
-// Helper function to map flag fields to actual database column names
-func getDatabaseColumnName(flagField string) string {
-	// Direct mapping to avoid any conversion issues
-	fieldMap := map[string]string{
-		"ScannedReceiptProvided":                   "processed_receipt_provided",
-		"ScannedTPD1FormProvided":                  "processed_tpd1_form_provided",
-		"QuotationProvided":                        "processed_quotation_provided",
-		"ScannedInitialPlanProvided":               "initial_plan_provided",
-		"StructuralEngineeringCertificateProvided": "structural_engineering_certificate_provided",
-		"RingBeamCertificateProvided":              "ring_beam_certificate_provided",
+// recalculateApplicationCosts recalculates all financial fields
+func (ac *ApplicationController) recalculateApplicationCosts(
+	tx *gorm.DB,
+	application *models.Application,
+	updates map[string]interface{},
+	req UpdateApplicationDetailsRequest,
+) error {
+	// Get current or new tariff
+	var tariff models.Tariff
+	tariffID := req.TariffID
+	if tariffID == nil {
+		tariffID = application.TariffID
 	}
 
-	if column, exists := fieldMap[flagField]; exists {
-		return column
+	if tariffID == nil {
+		return fmt.Errorf("no tariff specified for cost calculation")
 	}
 
-	// Fallback to simple conversion if somehow we get an unknown field
-	return strings.ToLower(flagField)
+	if err := tx.Preload("DevelopmentCategory").First(&tariff, "id = ?", tariffID).Error; err != nil {
+		return fmt.Errorf("failed to fetch tariff: %w", err)
+	}
+
+	// Get current or new VAT rate
+	var vatRate models.VATRate
+	vatRateID := req.VATRateID
+	if vatRateID == nil {
+		vatRateID = application.VATRateID
+	}
+
+	if vatRateID == nil {
+		return fmt.Errorf("no VAT rate specified for cost calculation")
+	}
+
+	if err := tx.First(&vatRate, "id = ?", vatRateID).Error; err != nil {
+		return fmt.Errorf("failed to fetch VAT rate: %w", err)
+	}
+
+	// Get plan area
+	planArea := req.PlanArea
+	if planArea == nil {
+		planArea = application.PlanArea
+	}
+
+	if planArea == nil || planArea.IsZero() {
+		return fmt.Errorf("plan area is required for cost calculation")
+	}
+
+	// Calculate costs
+	// Area cost = PlanArea × PricePerSquareMeter
+	areaCost := planArea.Mul(tariff.PricePerSquareMeter)
+
+	// Development levy = (AreaCost + PermitFee + InspectionFee) × DevelopmentLevyPercent / 100
+	subtotal := areaCost.Add(tariff.PermitFee).Add(tariff.InspectionFee)
+	developmentLevy := subtotal.Mul(tariff.DevelopmentLevyPercent).Div(decimal.NewFromInt(100))
+
+	// Total before VAT
+	totalBeforeVAT := subtotal.Add(developmentLevy)
+
+	// VAT amount
+	vatAmount := totalBeforeVAT.Mul(vatRate.Rate)
+
+	// Total cost
+	totalCost := totalBeforeVAT.Add(vatAmount)
+
+	// Update the updates map
+	updates["development_levy"] = developmentLevy
+	updates["vat_amount"] = vatAmount
+	updates["total_cost"] = totalCost
+
+	config.Logger.Info("Recalculated application costs",
+		zap.String("planArea", planArea.String()),
+		zap.String("developmentLevy", developmentLevy.String()),
+		zap.String("vatAmount", vatAmount.String()),
+		zap.String("totalCost", totalCost.String()))
+
+	return nil
+}
+
+// updateWorkflowTimestamps sets appropriate timestamp fields based on status
+func (ac *ApplicationController) updateWorkflowTimestamps(
+	updates map[string]interface{},
+	status models.ApplicationStatus,
+	application *models.Application,
+) {
+	now := time.Now()
+
+	switch status {
+	case models.UnderReviewApplication:
+		if application.ReviewStartedAt == nil {
+			updates["review_started_at"] = &now
+		}
+	case models.ApprovedApplication:
+		if application.FinalApprovalDate == nil {
+			updates["final_approval_date"] = &now
+		}
+		if application.ReviewCompletedAt == nil {
+			updates["review_completed_at"] = &now
+		}
+	case models.RejectedApplication:
+		if application.RejectionDate == nil {
+			updates["rejection_date"] = &now
+		}
+		if application.ReviewCompletedAt == nil {
+			updates["review_completed_at"] = &now
+		}
+	case models.CollectedApplication:
+		if application.CollectionDate == nil {
+			updates["collection_date"] = &now
+		}
+	}
+}
+
+// updateAllDocumentsProvidedFlag checks if all mandatory documents are provided
+func (ac *ApplicationController) updateAllDocumentsProvidedFlag(
+	application *models.Application,
+	updates map[string]interface{},
+) {
+	// Get current values or updated values
+	getValue := func(field string, current bool) bool {
+		if val, exists := updates[field]; exists {
+			if boolVal, ok := val.(bool); ok {
+				return boolVal
+			}
+		}
+		return current
+	}
+
+	processedReceipt := getValue("processed_receipt_provided", application.ProcessedReceiptProvided)
+	initialPlan := getValue("initial_plan_provided", application.InitialPlanProvided)
+	tpd1Form := getValue("processed_tpd1_form_provided", application.ProcessedTPD1FormProvided)
+	quotation := getValue("processed_quotation_provided", application.ProcessedQuotationProvided)
+
+	allDocsProvided := processedReceipt && initialPlan && tpd1Form && quotation
+
+	updates["all_documents_provided"] = allDocsProvided
+
+	if allDocsProvided && application.DocumentsCompletedAt == nil {
+		now := time.Now()
+		updates["documents_completed_at"] = &now
+	}
+}
+
+// updateReadyForReviewFlag checks if application is ready for review
+func (ac *ApplicationController) updateReadyForReviewFlag(
+	application *models.Application,
+	updates map[string]interface{},
+) {
+	// Get payment status
+	paymentStatus := application.PaymentStatus
+	if val, exists := updates["payment_status"]; exists {
+		if status, ok := val.(models.PaymentStatus); ok {
+			paymentStatus = status
+		}
+	}
+
+	// Get all documents provided status
+	allDocsProvided := application.AllDocumentsProvided
+	if val, exists := updates["all_documents_provided"]; exists {
+		if provided, ok := val.(bool); ok {
+			allDocsProvided = provided
+		}
+	}
+
+	readyForReview := paymentStatus == models.PaidPayment && allDocsProvided
+
+	updates["ready_for_review"] = readyForReview
 }

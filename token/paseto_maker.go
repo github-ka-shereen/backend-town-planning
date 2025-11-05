@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/o1egl/paseto"
 	"golang.org/x/crypto/chacha20poly1305"
 )
-
 
 // PasetoMaker will create tokens
 type PasetoMaker struct {
@@ -28,9 +28,9 @@ func NewPasetoMaker(symmetricKey string) (Maker, error) {
 	return maker, nil
 }
 
-// CreateToken creates a new token for a specific email and duration
-func (maker *PasetoMaker) CreateToken(email string, duration time.Duration) (string, error) {
-	payload, err := NewPayload(email, duration)
+// CreateToken creates a new token for a specific user and duration
+func (maker *PasetoMaker) CreateToken(userID uuid.UUID, duration time.Duration) (string, error) {
+	payload, err := NewPayload(userID, duration)
 	if err != nil {
 		return "", fmt.Errorf("failed to create token payload: %w", err)
 	}

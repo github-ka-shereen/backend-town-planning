@@ -26,6 +26,31 @@ const (
 	CommentTypeResolution CommentType = "RESOLUTION"
 )
 
+// ========================================
+// ISSUE ASSIGNMENT TYPES - CLEARLY DEFINED
+// ========================================
+type IssueAssignmentType string
+
+const (
+	// COLLABORATIVE: ANY staff member can resolve this issue
+	// Use for: General questions, information gathering, collaborative problems
+	// Example: "Is there paper for printing permits?" → Anyone who knows can answer
+	// Fields used: AssignedToUserID = NULL, AssignedToGroupMemberID = NULL
+	IssueAssignment_COLLABORATIVE IssueAssignmentType = "COLLABORATIVE"
+
+	// GROUP_MEMBER: Only a SPECIFIC approval group member can resolve
+	// Use for: Technical questions requiring specific expertise within the group
+	// Example: "Verify structural engineering calculations" → Only engineering member can approve
+	// Fields used: AssignedToGroupMemberID = required, AssignedToUserID = NULL
+	IssueAssignment_GROUP_MEMBER IssueAssignmentType = "GROUP_MEMBER"
+
+	// SPECIFIC_USER: Only ONE SPECIFIC staff member (anywhere in system) can resolve
+	// Use for: Department-specific questions, external expertise, specialized tasks
+	// Example: "Printing department - confirm paper is available" → Only printing staff member
+	// Fields used: AssignedToUserID = required, AssignedToGroupMemberID = NULL
+	IssueAssignment_SPECIFIC_USER IssueAssignmentType = "SPECIFIC_USER"
+)
+
 // MemberDecisionStatus tracks individual member decisions
 type MemberDecisionStatus string
 
@@ -282,30 +307,7 @@ type ApplicationIssue struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// ========================================
-// ISSUE ASSIGNMENT TYPES - CLEARLY DEFINED
-// ========================================
-type IssueAssignmentType string
 
-const (
-	// 🔓 COLLABORATIVE: ANY staff member can resolve this issue
-	// Use for: General questions, information gathering, collaborative problems
-	// Example: "Is there paper for printing permits?" → Anyone who knows can answer
-	// Fields used: AssignedToUserID = NULL, AssignedToGroupMemberID = NULL
-	IssueAssignment_COLLABORATIVE IssueAssignmentType = "COLLABORATIVE"
-
-	// 👥 GROUP_MEMBER: Only a SPECIFIC approval group member can resolve
-	// Use for: Technical questions requiring specific expertise within the group
-	// Example: "Verify structural engineering calculations" → Only engineering member can approve
-	// Fields used: AssignedToGroupMemberID = required, AssignedToUserID = NULL
-	IssueAssignment_GROUP_MEMBER IssueAssignmentType = "GROUP_MEMBER"
-
-	// 👤 SPECIFIC_USER: Only ONE SPECIFIC staff member (anywhere in system) can resolve
-	// Use for: Department-specific questions, external expertise, specialized tasks
-	// Example: "Printing department - confirm paper is available" → Only printing staff member
-	// Fields used: AssignedToUserID = required, AssignedToGroupMemberID = NULL
-	IssueAssignment_SPECIFIC_USER IssueAssignmentType = "SPECIFIC_USER"
-)
 
 // ========================================
 // HELPER METHODS FOR VALIDATION

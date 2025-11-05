@@ -66,7 +66,7 @@ func (lc *LoginController) ValidateOtp(c *fiber.Ctx) error {
 		CreatedBy: user.CreatedBy,
 	}
 
-	accessToken, err := lc.PasetoMaker.CreateToken(user.Email, 15*time.Minute)
+	accessToken, err := lc.PasetoMaker.CreateToken(user.ID, 15*time.Minute)
 	if err != nil {
 		config.Logger.Error("Error generating access token",
 			zap.String("user_id", user.ID.String()),
@@ -79,7 +79,7 @@ func (lc *LoginController) ValidateOtp(c *fiber.Ctx) error {
 		})
 	}
 
-	refreshToken, err := lc.PasetoMaker.CreateToken(user.Email, 7*24*time.Hour)
+	refreshToken, err := lc.PasetoMaker.CreateToken(user.ID, 7*24*time.Hour)
 	if err != nil {
 		config.Logger.Error("Error generating refresh token",
 			zap.String("user_id", user.ID.String()),

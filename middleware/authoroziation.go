@@ -59,7 +59,7 @@ func ProtectedRoute(ctx *AppContext) fiber.Handler {
 			// already used (if single-use is enforced), or invalid.
 			config.Logger.Warn("Refresh token not found in Redis",
 				zap.String("payload_id", refreshPayload.ID.String()),
-				zap.String("email", refreshPayload.Email),
+				zap.String("user_id", refreshPayload.UserID.String()), // Updated from email to UserID
 			)
 			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 				"message": "Unauthorized",
@@ -69,12 +69,24 @@ func ProtectedRoute(ctx *AppContext) fiber.Handler {
 			// Handle other Redis errors (e.g., connection issues)
 			config.Logger.Error("Error accessing Redis for refresh token validation",
 				zap.String("payload_id", refreshPayload.ID.String()),
-				zap.String("email", refreshPayload.Email),
+				zap.String("user_id", refreshPayload.UserID.String()), // Updated from email to UserID
 				zap.Error(err),
 			)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 				"message": "Something went wrong",
 				"error":   "An internal server error occurred.", // Generic error for client
+			})
+		}
+
+		// Validate that the user ID from Redis matches the token payload
+		if userID != refreshPayload.UserID.String() {
+			config.Logger.Warn("User ID mismatch between Redis and token payload",
+				zap.String("redis_user_id", userID),
+				zap.String("token_user_id", refreshPayload.UserID.String()),
+			)
+			return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+				"message": "Unauthorized",
+				"error":   "Session invalid. Please log in again.", // Generic error for client
 			})
 		}
 
@@ -92,7 +104,7 @@ func ProtectedRoute(ctx *AppContext) fiber.Handler {
 		}
 
 		// 2. Generate a new access token
-		newAccessToken, err := ctx.PasetoMaker.CreateToken(refreshPayload.Email, 15*time.Minute)
+		newAccessToken, err := ctx.PasetoMaker.CreateToken(refreshPayload.UserID, 15*time.Minute) // Updated from Email to UserID
 		if err != nil {
 			config.Logger.Error("Could not generate new access token",
 				zap.String("user_id", userID),
@@ -105,7 +117,7 @@ func ProtectedRoute(ctx *AppContext) fiber.Handler {
 		}
 
 		// 3. Generate a new refresh token
-		newRefreshToken, err := ctx.PasetoMaker.CreateToken(refreshPayload.Email, 7*24*time.Hour) // 7 days duration
+		newRefreshToken, err := ctx.PasetoMaker.CreateToken(refreshPayload.UserID, 7*24*time.Hour) // 7 days duration, updated from Email to UserID
 		if err != nil {
 			config.Logger.Error("Could not generate new refresh token",
 				zap.String("user_id", userID),
@@ -119,10 +131,10 @@ func ProtectedRoute(ctx *AppContext) fiber.Handler {
 
 		// 4. Store the new refresh token in Redis, associated with the user ID
 		// The key is "refresh_token:<new_refresh_token_string>", value is the userID.
-		err = ctx.RedisClient.Set(ctx.Ctx, "refresh_token:"+newRefreshToken, userID, 7*24*time.Hour).Err()
+		err = ctx.RedisClient.Set(ctx.Ctx, "refresh_token:"+newRefreshToken, refreshPayload.UserID.String(), 7*24*time.Hour).Err() // Updated to use refreshPayload.UserID
 		if err != nil {
 			config.Logger.Error("Error storing new refresh token in Redis",
-				zap.String("user_id", userID),
+				zap.String("user_id", refreshPayload.UserID.String()), // Updated to use refreshPayload.UserID
 				zap.Error(err),
 			)
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

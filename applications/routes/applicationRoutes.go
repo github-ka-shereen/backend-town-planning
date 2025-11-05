@@ -39,18 +39,36 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/approval-groups/create-with-members", applicationController.CreateApprovalGroupWithMembers)
 	applicationRoutes.Get("/filtered-approval-groups", applicationController.GetFilteredApprovalGroupsController)
 
-	// Applications
+	// Applications - Comprehensive endpoints
 	applicationRoutes.Post("/create-application", applicationController.CreateApplicationController)
 	applicationRoutes.Get("/filtered-applications", applicationController.GetFilteredApplicationsController)
 	applicationRoutes.Get("/application/:id", applicationController.GetApplicationByIdController)
-	applicationRoutes.Patch("/update-application/:id", applicationController.UpdateApplicationController)
+
+
+	// New comprehensive update endpoint - updates ALL fields
+	applicationRoutes.Put("/applications/:id", applicationController.UpdateApplicationDetailsController)
+
+	// New granular update endpoints
+	applicationRoutes.Patch("/applications/:id/status", applicationController.UpdateApplicationStatusController)
+	applicationRoutes.Patch("/applications/:id/architect", applicationController.UpdateApplicationArchitectController)
+	applicationRoutes.Patch("/applications/:id/costs", applicationController.RecalculateApplicationCostsController)
+	applicationRoutes.Patch("/applications/:id/collection", applicationController.MarkApplicationCollectedController)
+	applicationRoutes.Patch("/applications/:id/document-flags", applicationController.UpdateDocumentFlagsController)
+
+	// Application Documents
+	// applicationRoutes.Get("/applications/:id/documents", applicationController.GetApplicationDocumentsController)
+	// applicationRoutes.Post("/applications/:id/documents", applicationController.UploadApplicationDocumentController)
+	// applicationRoutes.Delete("/applications/:id/documents/:documentId", applicationController.DeleteApplicationDocumentController)
 
 	// Application Actions (MUST come before generic :id routes)
 	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
-	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController) // Change to POST if it modifies data
+	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
 
 	// Approval Workflow - Use POST for actions that change state
 	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
 	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
 	applicationRoutes.Post("/applications/:id/issues", applicationController.RaiseIssueController)
+
+	// New approval workflow endpoints
+	// applicationRoutes.Post("/applications/:id/assign-group", applicationController.AssignApplicationToGroupController)
 }

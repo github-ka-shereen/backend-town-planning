@@ -10,21 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// ApprovalResult represents the outcome of an approval operation
-type ApprovalResult struct {
-	ApplicationStatus     models.ApplicationStatus `json:"application_status"`
-	IsFinalApprover       bool                     `json:"is_final_approver"`
-	ReadyForFinalApproval bool                     `json:"ready_for_final_approval"`
-	ApprovedCount         int                      `json:"approved_count"`
-	TotalMembers          int                      `json:"total_members"`
-	UnresolvedIssues      int                      `json:"unresolved_issues"`
-}
-
-// RejectionResult represents the outcome of a rejection operation
-type RejectionResult struct {
-	ApplicationStatus models.ApplicationStatus `json:"application_status"`
-	IsFinalApprover   bool                     `json:"is_final_approver"`
-}
 
 // ProcessApplicationApproval handles the approval of an application by a group member
 func (r *applicationRepository) ProcessApplicationApproval(
@@ -330,9 +315,10 @@ func (r *applicationRepository) RaiseApplicationIssue(
 	assignedToUserID *uuid.UUID,
 	assignedToGroupMemberID *uuid.UUID,
 ) (*models.ApplicationIssue, error) {
-	// Fetch application with group assignment
+	// Fetch application with group assignment and members
 	var application models.Application
 	err := tx.
+		Preload("ApprovalGroup.Members", "is_active = ?", true).
 		Preload("GroupAssignments", "is_active = ?", true).
 		Where("id = ?", applicationID).
 		First(&application).Error
@@ -341,12 +327,18 @@ func (r *applicationRepository) RaiseApplicationIssue(
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("application not found")
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch application: %w", err)
 	}
 
-	// Check if user is a member of the approval group
+	// Validate we have an approval group
+	if application.ApprovalGroup == nil {
+		return nil, errors.New("application has no approval group")
+	}
+
+	// Check if user is an active member of the approval group
 	var groupMember models.ApprovalGroupMember
 	err = tx.
+		Preload("User").
 		Where("approval_group_id = ? AND user_id = ? AND is_active = ?",
 			application.ApprovalGroup.ID, userID, true).
 		First(&groupMember).Error
@@ -355,7 +347,7 @@ func (r *applicationRepository) RaiseApplicationIssue(
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return nil, errors.New("user not authorized to raise issues for this application")
 		}
-		return nil, err
+		return nil, fmt.Errorf("failed to fetch group member: %w", err)
 	}
 
 	// Check if user can raise issues
@@ -370,38 +362,64 @@ func (r *applicationRepository) RaiseApplicationIssue(
 
 	assignment := application.GroupAssignments[0]
 
-	// Validate assignment based on assignment type
+	// Validate assignment based on assignment type using the model's validation logic
+	tempIssue := models.ApplicationIssue{
+		AssignmentType:          assignmentType,
+		AssignedToUserID:        assignedToUserID,
+		AssignedToGroupMemberID: assignedToGroupMemberID,
+	}
+
+	if err := tempIssue.ValidateAssignment(); err != nil {
+		return nil, fmt.Errorf("invalid assignment: %w", err)
+	}
+
+	// Additional validation specific to the context
 	switch assignmentType {
-	case models.IssueAssignment_COLLABORATIVE:
-		if assignedToUserID != nil || assignedToGroupMemberID != nil {
-			return nil, errors.New("collaborative issues cannot have specific assignments")
-		}
 	case models.IssueAssignment_GROUP_MEMBER:
-		if assignedToGroupMemberID == nil {
-			return nil, errors.New("group member assignment requires assigned_to_group_member_id")
-		}
-		// Verify the assigned member belongs to the same group
+		// Verify the assigned member belongs to the same group and is active
 		var assignedMember models.ApprovalGroupMember
-		if err := tx.Where("id = ? AND approval_group_id = ?", assignedToGroupMemberID, application.ApprovalGroup.ID).First(&assignedMember).Error; err != nil {
-			return nil, errors.New("invalid group member assignment")
+		if err := tx.
+			Where("id = ? AND approval_group_id = ? AND is_active = ?", 
+				assignedToGroupMemberID, application.ApprovalGroup.ID, true).
+			First(&assignedMember).Error; err != nil {
+			return nil, errors.New("invalid group member assignment - member not found or inactive")
 		}
+		// Verify the assigned member can resolve issues (has appropriate permissions)
+		if !assignedMember.CanApprove && !assignedMember.CanReject {
+			return nil, errors.New("assigned group member does not have resolution permissions")
+		}
+
 	case models.IssueAssignment_SPECIFIC_USER:
-		if assignedToUserID == nil {
-			return nil, errors.New("specific user assignment requires assigned_to_user_id")
-		}
-		// Verify user exists
+		// Verify user exists and is active
 		var assignedUser models.User
-		if err := tx.Where("id = ?", assignedToUserID).First(&assignedUser).Error; err != nil {
-			return nil, errors.New("invalid user assignment")
+		if err := tx.Where("id = ? AND is_active = ?", assignedToUserID, true).First(&assignedUser).Error; err != nil {
+			return nil, errors.New("invalid user assignment - user not found or inactive")
 		}
 	}
 
-	// Create the issue
+	// Create decision record first - this represents the act of raising the issue
+	decisionID := uuid.New()
+	decision := models.MemberApprovalDecision{
+		ID:                      decisionID,
+		AssignmentID:            assignment.ID,
+		MemberID:                groupMember.ID,
+		UserID:                  userID,
+		Status:                  models.DecisionPending, // Issue raising doesn't change decision status
+		AssignedAs:              groupMember.Role,
+		IsFinalApproverDecision: groupMember.IsFinalApprover,
+		WasAvailable:            groupMember.AvailabilityStatus == models.AvailabilityAvailable,
+	}
+
+	if err := tx.Create(&decision).Error; err != nil {
+		return nil, fmt.Errorf("failed to create decision record: %w", err)
+	}
+
+	// Create the issue with proper relationships
 	issue := models.ApplicationIssue{
 		ID:                      uuid.New(),
 		ApplicationID:           application.ID,
 		AssignmentID:            assignment.ID,
-		RaisedByDecisionID:      uuid.Nil, // This will be set after we create a decision record
+		RaisedByDecisionID:      decisionID, // Link to the decision we just created
 		RaisedByUserID:          userID,
 		AssignmentType:          assignmentType,
 		AssignedToUserID:        assignedToUserID,
@@ -413,33 +431,41 @@ func (r *applicationRepository) RaiseApplicationIssue(
 		IsResolved:              false,
 	}
 
-	// Create a decision record for the issue raising
-	decision := models.MemberApprovalDecision{
-		ID:                      uuid.New(),
-		AssignmentID:            assignment.ID,
-		MemberID:                groupMember.ID,
-		UserID:                  userID,
-		Status:                  models.DecisionPending, // Issue raising doesn't change decision status
-		AssignedAs:              groupMember.Role,
-		IsFinalApproverDecision: groupMember.IsFinalApprover,
-		WasAvailable:            groupMember.AvailabilityStatus == models.AvailabilityAvailable,
-	}
-
-	if err := tx.Create(&decision).Error; err != nil {
-		return nil, err
-	}
-
-	// Update the issue with the decision ID
-	issue.RaisedByDecisionID = decision.ID
-
 	if err := tx.Create(&issue).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create issue: %w", err)
 	}
 
 	// Update assignment issue count
 	assignment.IssuesRaised++
 	if err := tx.Save(&assignment).Error; err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to update assignment issue count: %w", err)
+	}
+
+	// If this issue makes the application not ready for final approval, update the status
+	if assignment.ReadyForFinalApproval {
+		// Check if the new issue affects final approval readiness
+		if !assignment.IsReadyForFinalApproval() {
+			assignment.ReadyForFinalApproval = false
+			if err := tx.Save(&assignment).Error; err != nil {
+				return nil, fmt.Errorf("failed to update final approval status: %w", err)
+			}
+		}
+	}
+
+	// Create an initial comment for the issue
+	comment := models.Comment{
+		ID:            uuid.New(),
+		ApplicationID: application.ID,
+		IssueID:       &issue.ID,
+		CommentType:   models.CommentTypeIssue,
+		Content:       fmt.Sprintf("Issue raised: %s", description),
+		UserID:        userID,
+		CreatedBy:     fmt.Sprintf("%s %s", groupMember.User.FirstName, groupMember.User.LastName),
+	}
+
+	if err := tx.Create(&comment).Error; err != nil {
+		// Don't fail the entire operation if comment creation fails, just log it
+		fmt.Printf("Failed to create initial comment for issue: %v\n", err)
 	}
 
 	return &issue, nil
