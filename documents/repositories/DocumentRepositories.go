@@ -1,12 +1,15 @@
 package repositories
 
 import (
+	"errors"
 	"fmt"
 	"time"
+	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 	stand_repositories "town-planning-backend/stands/repositories"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -112,129 +115,95 @@ func (r *documentRepository) GetApplicant(tx *gorm.DB, applicantID uuid.UUID) (*
 	return &applicant, nil
 }
 
-// FindExistingDocument - finds existing documents using join tables
 func (r *documentRepository) FindExistingDocument(tx *gorm.DB, categoryID uuid.UUID, entityType string, entityID *uuid.UUID) (*models.Document, error) {
-	if entityID == nil {
+	config.Logger.Info("🔍 FindExistingDocument query starting",
+		zap.String("entityType", entityType),
+		zap.Any("entityID", entityID),
+		zap.String("categoryID", categoryID.String()))
+
+	// If no entityID is provided for entity types that require it, return nil early
+	if entityID == nil && entityType != "general" {
+		config.Logger.Info("No entityID provided - returning nil (this is normal for new entities)")
 		return nil, nil
 	}
 
-	var existingDoc models.Document
+	var document models.Document
 
-	// Use join tables to find existing documents based on your model structure
+	query := tx.Model(&models.Document{}).
+		Where("category_id = ? AND is_current_version = true AND deleted_at IS NULL", categoryID)
+
 	switch entityType {
 	case "application":
-		err := tx.Joins("JOIN application_documents ON documents.id = application_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND application_documents.application_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
-	case "stand":
-		err := tx.Joins("JOIN stand_documents ON documents.id = stand_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND stand_documents.stand_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN application_documents ON documents.id = application_documents.document_id").
+			Where("application_documents.application_id = ?", entityID)
+	
 	case "applicant":
-		err := tx.Joins("JOIN applicant_documents ON documents.id = applicant_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND applicant_documents.applicant_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN applicant_documents ON documents.id = applicant_documents.document_id").
+			Where("applicant_documents.applicant_id = ?", entityID)
+	
+	case "stand":
+		query = query.Joins("JOIN stand_documents ON documents.id = stand_documents.document_id").
+			Where("stand_documents.stand_id = ?", entityID)
+	
 	case "project":
-		err := tx.Joins("JOIN project_documents ON documents.id = project_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND project_documents.project_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN project_documents ON documents.id = project_documents.document_id").
+			Where("project_documents.project_id = ?", entityID)
+	
 	case "payment":
-		err := tx.Joins("JOIN payment_documents ON documents.id = payment_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND payment_documents.payment_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN payment_documents ON documents.id = payment_documents.document_id").
+			Where("payment_documents.payment_id = ?", entityID)
+	
 	case "comment":
-		err := tx.Joins("JOIN comment_documents ON documents.id = comment_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND comment_documents.comment_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN comment_documents ON documents.id = comment_documents.document_id").
+			Where("comment_documents.comment_id = ?", entityID)
+	
 	case "email":
-		err := tx.Joins("JOIN email_documents ON documents.id = email_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND email_documents.email_log_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN email_documents ON documents.id = email_documents.document_id").
+			Where("email_documents.email_log_id = ?", entityID)
+	
 	case "bank":
-		err := tx.Joins("JOIN bank_documents ON documents.id = bank_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND bank_documents.bank_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
-		}
-
+		query = query.Joins("JOIN bank_documents ON documents.id = bank_documents.document_id").
+			Where("bank_documents.bank_id = ?", entityID)
+	
 	case "user":
-		err := tx.Joins("JOIN user_documents ON documents.id = user_documents.document_id").
-			Where("documents.category_id = ? AND documents.is_current_version = ? AND user_documents.user_id = ?",
-				categoryID, true, entityID).
-			First(&existingDoc).Error
-		if err != nil {
-			if err == gorm.ErrRecordNotFound {
-				return nil, nil
-			}
-			return nil, err
+		query = query.Joins("JOIN user_documents ON documents.id = user_documents.document_id").
+			Where("user_documents.user_id = ?", entityID)
+	
+	case "general":
+		// For general documents, no additional join needed
+		if entityID != nil {
+			query = query.Where("id = ?", entityID)
+		} else {
+			config.Logger.Info("General document with no entityID - returning nil")
+			return nil, nil
 		}
-
+	
 	default:
-		return nil, nil
+		config.Logger.Warn("Unknown entity type", zap.String("entityType", entityType))
+		return nil, fmt.Errorf("unsupported entity type: %s", entityType)
 	}
 
-	return &existingDoc, nil
+	err := query.First(&document).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			config.Logger.Info("✅ No existing document found (this is normal for new entities)",
+				zap.String("entityType", entityType),
+				zap.String("categoryID", categoryID.String()))
+			return nil, nil
+		}
+		config.Logger.Error("❌ Database error in FindExistingDocument", 
+			zap.Error(err),
+			zap.String("entityType", entityType),
+			zap.String("categoryID", categoryID.String()))
+		return nil, fmt.Errorf("database error while finding existing document: %w", err)
+	}
+
+	config.Logger.Info("📄 Found existing document",
+		zap.String("documentID", document.ID.String()),
+		zap.Int("version", document.Version),
+		zap.String("entityType", entityType))
+	
+	return &document, nil
 }
 
 // UpdateDocument - updates document by document ID

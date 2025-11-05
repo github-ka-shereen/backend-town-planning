@@ -1,6 +1,7 @@
 package routes
 
 import (
+	applicants_repositories "town-planning-backend/applicants/repositories"
 	controllers "town-planning-backend/applications/controllers"
 	repositories "town-planning-backend/applications/repositories"
 	indexing_repository "town-planning-backend/bleve/repositories"
@@ -18,6 +19,7 @@ func ApplicationRouterInit(
 	bleveRepository indexing_repository.BleveRepositoryInterface,
 	userRepo user_repository.UserRepository,
 	documentService *documents_services.DocumentService,
+	applicantRepo applicants_repositories.ApplicantRepository,
 ) {
 	applicationController := &controllers.ApplicationController{
 		ApplicationRepo: applicationRepository,
@@ -25,6 +27,7 @@ func ApplicationRouterInit(
 		BleveRepo:       bleveRepository,
 		UserRepo:        userRepo,
 		DocumentSvc:     documentService,
+		ApplicantRepo:   applicantRepo,
 	}
 
 	applicationRoutes := app.Group("/api/v1")

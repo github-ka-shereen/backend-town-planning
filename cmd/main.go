@@ -8,7 +8,7 @@ import (
 	"town-planning-backend/token"
 	"town-planning-backend/utils"
 
-	// "town-planning-backend/middleware"
+	// "town-planning-backend/seeds"
 
 	"town-planning-backend/middleware"
 
@@ -158,7 +158,7 @@ func main() {
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
-	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService)
+	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService, applicantRepo)
 	stand_routes.StandRouterInit(app, db, standRepo, bleveInterfaceRepo)
 
 	// Bleve Routes
@@ -176,8 +176,21 @@ func main() {
 	// // Re-Index all data
 	// bootstrap.IndexBleveData(ctx, userRepo, applicantRepo, standRepo, bleveInterfaceRepo)
 
-	// Run seeders for initial data
-	// config.RunAllSeeders(db)
+	//------ Run seeders for initial data with proper error handling and logging ------ //
+	// config.Logger.Info("Starting database seeding...")
+
+	// // Run comprehensive database seeding
+	// config.Logger.Info("Starting comprehensive database seeding process...")
+
+	// if err := seeds.SeedTownPlanningAll(db); err != nil {
+	// 	config.Logger.Error("Database seeding failed", zap.Error(err))
+	// } else {
+	// 	config.Logger.Info("All database seeding completed successfully")
+	// }
+
+	// config.Logger.Info("Database seeding process finished")
+
+	//------ Run seeders for initial data with proper error handling and logging ------ //
 
 	// Start the application
 	config.Logger.Fatal("Server failed", zap.String("port", port), zap.Error(app.Listen(":"+port)))

@@ -9,6 +9,7 @@ import (
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 	documents_requests "town-planning-backend/documents/requests"
+	"town-planning-backend/token"
 	"town-planning-backend/utils"
 
 	"github.com/gofiber/fiber/v2"
@@ -49,6 +50,24 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 			"success": false,
 			"message": "Invalid request body",
 			"error":   err.Error(),
+		})
+	}
+
+	// Get authenticated user
+	payload, ok := c.Locals("user").(*token.Payload)
+	if !ok || payload == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not authenticated",
+		})
+	}
+
+	userUUID, err := uuid.Parse(payload.UserID.String())
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false,
+			"message": "Invalid user ID",
+			"error":   "invalid_uuid",
 		})
 	}
 
@@ -264,12 +283,11 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 
 	// Create document request using the service pattern
 	documentRequest := &documents_requests.CreateDocumentRequest{
-		CategoryCode:   "DEVELOPMENT_PERMIT_QUOTATION", // Make sure this category exists
-		FileName:       filename,
-		ApplicationID:  &createdApplication.ID,
-		ApplicantID:    &createdApplication.ApplicantID,
-		CreatedBy:      req.CreatedBy,
-		FileType:       "application/pdf",
+		CategoryCode:  "DEVELOPMENT_PERMIT_QUOTATION", // Make sure this category exists
+		FileName:      filename,
+		ApplicationID: &createdApplication.ID,
+		CreatedBy:     req.CreatedBy,
+		FileType:      "application/pdf",
 	}
 
 	// Create quotation document using DocumentService
@@ -300,12 +318,53 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 		})
 	}
 
+	// CRITICAL: Check if response is nil (defensive programming)
+	if response == nil {
+		config.Logger.Error("Document service returned nil response without error",
+			zap.String("applicationID", createdApplication.ID.String()))
+
+		// Clean up the generated PDF file
+		if cleanupErr := os.Remove(pdfPath); cleanupErr != nil {
+			config.Logger.Warn("Failed to cleanup PDF file",
+				zap.String("pdfPath", pdfPath),
+				zap.Error(cleanupErr))
+		}
+
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Document service returned invalid response",
+			"error":   "nil_response",
+		})
+	}
+
+	// CRITICAL: Check if response.Document is nil
+	if response.Document == nil {
+		config.Logger.Error("Document service returned response with nil document",
+			zap.String("applicationID", createdApplication.ID.String()),
+			zap.String("responseID", response.ID.String()))
+
+		// Clean up the generated PDF file
+		if cleanupErr := os.Remove(pdfPath); cleanupErr != nil {
+			config.Logger.Warn("Failed to cleanup PDF file",
+				zap.String("pdfPath", pdfPath),
+				zap.Error(cleanupErr))
+		}
+
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Document service returned invalid document",
+			"error":   "nil_document",
+		})
+	}
+
 	config.Logger.Info("Quotation document created successfully",
 		zap.String("documentID", response.ID.String()),
 		zap.String("applicationID", createdApplication.ID.String()))
 
 	// Preload the document for the response
-	if err := tx.Preload("Documents").
+	if err := tx.Preload("ApplicationDocuments.Document").
 		Preload("Applicant").
 		Preload("Tariff").
 		Preload("Stand").
@@ -317,6 +376,18 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "Failed to load application details",
+			"error":   err.Error(),
+		})
+	}
+
+	// Assign the application to the approval group
+	_, err = ac.ApplicantRepo.AssignApplicationToGroup(tx, createdApplication.ID.String(), *req.AssignedGroupID, req.CreatedBy, nil, userUUID)
+	if err != nil {
+		config.Logger.Error("Failed to assign application to group", zap.Error(err))
+		tx.Rollback()
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to assign application to group",
 			"error":   err.Error(),
 		})
 	}
@@ -339,9 +410,9 @@ func (ac *ApplicationController) CreateApplicationController(c *fiber.Ctx) error
 		"data": fiber.Map{
 			"application": createdApplication,
 			"quotation": fiber.Map{
-				"document_id": response.ID,
-				"filename":    filename,
-				"file_path":   response.Document.FilePath,
+				"document_id":  response.ID,
+				"filename":     filename,
+				"file_path":    response.Document.FilePath,
 				"generated_at": time.Now().Format(time.RFC3339),
 			},
 		},

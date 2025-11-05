@@ -107,9 +107,9 @@ func (s *DocumentService) UnifiedCreateDocument(
 		s.cleanupFile(filePath)
 		return nil, fmt.Errorf("invalid file size: %d bytes", fileSize)
 	}
-	
+
 	if fileSize == 0 {
-		config.Logger.Warn("File has zero size", 
+		config.Logger.Warn("File has zero size",
 			zap.String("filename", fileName),
 			zap.String("path", filePath))
 	}
@@ -435,7 +435,6 @@ func (s *DocumentService) generateDescriptiveFilename(
 	return filename
 }
 
-// Versioning methods
 func (s *DocumentService) prepareVersioning(
 	tx *gorm.DB,
 	request *documents_requests.CreateDocumentRequest,
@@ -443,28 +442,72 @@ func (s *DocumentService) prepareVersioning(
 ) (*VersionInfo, error) {
 
 	entityType, entityID := s.determineEntityType(request)
+
+	config.Logger.Info("🔍 Versioning check starting",
+		zap.String("entityType", entityType),
+		zap.Any("entityID", entityID),
+		zap.String("categoryCode", request.CategoryCode),
+		zap.String("categoryID", categoryID.String()))
+
+	// Call FindExistingDocument
 	existingDoc, err := s.DocumentRepo.FindExistingDocument(tx, categoryID, entityType, entityID)
+
+	// Handle errors from FindExistingDocument
 	if err != nil {
-		return nil, err
+		config.Logger.Error("❌ Versioning check failed with error",
+			zap.Error(err),
+			zap.String("entityType", entityType),
+			zap.Any("entityID", entityID))
+		return nil, fmt.Errorf("versioning check failed: %w", err)
 	}
 
+	// No existing document found - this is the normal case for new entities
 	if existingDoc == nil {
+		config.Logger.Info("✅ No existing document found - starting with version 1",
+			zap.String("entityType", entityType),
+			zap.Any("entityID", entityID),
+			zap.String("category", request.CategoryCode))
+
 		return &VersionInfo{
 			Version:    1,
 			IsCurrent:  true,
 			PreviousID: nil,
+			OriginalID: nil,
 		}, nil
 	}
 
+	// Existing document found - create new version
+	config.Logger.Info("📄 Found existing document for versioning",
+		zap.String("existingDocID", existingDoc.ID.String()),
+		zap.Int("existingVersion", existingDoc.Version),
+		zap.String("entityType", entityType),
+		zap.Any("entityID", entityID))
+
+	// Archive the existing version
 	if err := s.archiveDocumentVersion(tx, existingDoc); err != nil {
+		config.Logger.Error("Failed to archive previous version",
+			zap.Error(err),
+			zap.String("documentID", existingDoc.ID.String()))
 		return nil, fmt.Errorf("failed to archive previous version: %w", err)
 	}
+
+	// Determine original ID for the version chain
+	originalID := existingDoc.OriginalID
+	if originalID == nil {
+		// If existing doc has no original ID, it IS the original
+		originalID = &existingDoc.ID
+	}
+
+	config.Logger.Info("✅ Version prepared successfully",
+		zap.Int("newVersion", existingDoc.Version+1),
+		zap.String("previousID", existingDoc.ID.String()),
+		zap.String("originalID", originalID.String()))
 
 	return &VersionInfo{
 		Version:    existingDoc.Version + 1,
 		IsCurrent:  true,
 		PreviousID: &existingDoc.ID,
-		OriginalID: existingDoc.OriginalID,
+		OriginalID: originalID,
 	}, nil
 }
 
@@ -584,17 +627,17 @@ func (s *DocumentService) calculateFileHash(fileName string, fileSize int64) str
 
 func (s *DocumentService) getMimeType(docType models.DocumentType) string {
 	mimeTypes := map[models.DocumentType]string{
-		models.WordDocumentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-		models.TextDocumentType: "text/plain",
-		models.SpreadsheetType:  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-		models.PresentationType: "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-		models.ImageType:        "image/jpeg",
-		models.PDFType:          "application/pdf",
-		models.CADDrawingType:   "application/dwg",
-		models.SurveyPlanType:   "application/pdf",
+		models.WordDocumentType:       "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+		models.TextDocumentType:       "text/plain",
+		models.SpreadsheetType:        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+		models.PresentationType:       "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+		models.ImageType:              "image/jpeg",
+		models.PDFType:                "application/pdf",
+		models.CADDrawingType:         "application/dwg",
+		models.SurveyPlanType:         "application/pdf",
 		models.EngineeringCertificate: "application/pdf",
-		models.BuildingPlanType: "application/pdf",
-		models.SitePlanType:     "application/pdf",
+		models.BuildingPlanType:       "application/pdf",
+		models.SitePlanType:           "application/pdf",
 	}
 	if mime, ok := mimeTypes[docType]; ok {
 		return mime
