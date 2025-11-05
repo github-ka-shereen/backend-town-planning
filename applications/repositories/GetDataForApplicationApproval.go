@@ -12,7 +12,7 @@ func (r *applicationRepository) GetDataForApplicationApproval(applicationID stri
 		Preload("Tariff").
 		Preload("Tariff.DevelopmentCategory").
 		Preload("VATRate").
-		Preload("Documents").
+		Preload("ApplicationDocuments.Document").
 		Preload("Payment").
 		Preload("ApprovalGroup.Members.User.Department").
 		Preload("ApprovalGroup.Members.User.Role").

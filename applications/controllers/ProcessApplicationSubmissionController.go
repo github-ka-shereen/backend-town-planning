@@ -112,13 +112,21 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 		})
 	}
 
-	// Process file uploads and update flags
+	// Process file uploads and update flags - ONLY for provided fields
 	updates := make(map[string]interface{})
 	updatedByStr := payload.UserID.String()
 	updates["updated_by"] = updatedByStr
 
 	var uploadedDocuments []string
 	var receiptProvided bool
+
+	// Debug: Log what we received
+	config.Logger.Info("Processing application submission",
+		zap.String("applicationID", applicationID),
+		zap.String("receiptNumber", req.ReceiptNumber),
+		zap.String("receiptDate", req.ReceiptDate),
+		zap.Bool("hasScannedReceipt", req.ScannedReceipt != nil),
+		zap.String("processedReceiptFlag", req.ProcessedReceiptProvided))
 
 	// Map files to document categories and flags
 	fileMappings := []struct {
@@ -135,73 +143,94 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 		{req.RingBeamCertificate, "RING_BEAM_CERTIFICATE", "ring_beam_certificate_provided", req.RingBeamCertificateProvided},
 	}
 
-	// Process all files first - if any fail, rollback entire transaction
+	// Process only provided files and flags
 	for _, mapping := range fileMappings {
-		// Determine flag value: true if file is provided OR flag is explicitly set to "true"
-		flagValue := mapping.fileHeader != nil || mapping.flagValue == "true"
+		fileProvided := mapping.fileHeader != nil
+		flagExplicitlySet := mapping.flagValue == "true"
 		
-		if mapping.fileHeader != nil {
-			// Upload the document
-			docRequest := &documents_requests.CreateDocumentRequest{
-				CategoryCode:  mapping.category,
-				FileName:      mapping.fileHeader.Filename,
-				ApplicationID: &appUUID,
-				ApplicantID:   &application.ApplicantID,
-				CreatedBy:     payload.UserID.String(),
-				FileType:      mapping.fileHeader.Header.Get("Content-Type"),
-			}
+		// Only process if file was provided OR flag was explicitly set
+		if fileProvided || flagExplicitlySet {
+			flagValue := fileProvided || flagExplicitlySet
+			
+			if fileProvided {
+				// Upload the document
+				docRequest := &documents_requests.CreateDocumentRequest{
+					CategoryCode:  mapping.category,
+					FileName:      mapping.fileHeader.Filename,
+					ApplicationID: &appUUID,
+					ApplicantID:   &application.ApplicantID,
+					CreatedBy:     payload.UserID.String(),
+					FileType:      mapping.fileHeader.Header.Get("Content-Type"),
+				}
 
-			// Read file content
-			file, err := mapping.fileHeader.Open()
-			if err != nil {
-				tx.Rollback()
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"success": false,
-					"message": fmt.Sprintf("Failed to open file: %s", mapping.fileHeader.Filename),
-					"error":   err.Error(),
-				})
-			}
+				// Read file content
+				file, err := mapping.fileHeader.Open()
+				if err != nil {
+					tx.Rollback()
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"success": false,
+						"message": fmt.Sprintf("Failed to open file: %s", mapping.fileHeader.Filename),
+						"error":   err.Error(),
+					})
+				}
 
-			fileContent := make([]byte, mapping.fileHeader.Size)
-			if _, err := file.Read(fileContent); err != nil {
+				fileContent := make([]byte, mapping.fileHeader.Size)
+				if _, err := file.Read(fileContent); err != nil {
+					file.Close()
+					tx.Rollback()
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"success": false,
+						"message": fmt.Sprintf("Failed to read file: %s", mapping.fileHeader.Filename),
+						"error":   err.Error(),
+					})
+				}
 				file.Close()
-				tx.Rollback()
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"success": false,
-					"message": fmt.Sprintf("Failed to read file: %s", mapping.fileHeader.Filename),
-					"error":   err.Error(),
-				})
-			}
-			file.Close()
 
-			// Create document using DocumentService - if this fails, rollback
-			_, err = ac.DocumentSvc.UnifiedCreateDocument(tx, c, docRequest, fileContent, nil)
-			if err != nil {
-				tx.Rollback()
-				config.Logger.Error("Failed to create document",
+				// Create document using DocumentService
+				_, err = ac.DocumentSvc.UnifiedCreateDocument(tx, c, docRequest, fileContent, nil)
+				if err != nil {
+					tx.Rollback()
+					config.Logger.Error("Failed to create document",
+						zap.String("filename", mapping.fileHeader.Filename),
+						zap.Error(err))
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"success": false,
+						"message": fmt.Sprintf("Failed to upload document: %s", mapping.fileHeader.Filename),
+						"error":   err.Error(),
+					})
+				}
+
+				uploadedDocuments = append(uploadedDocuments, mapping.fileHeader.Filename)
+				config.Logger.Info("Document uploaded successfully",
 					zap.String("filename", mapping.fileHeader.Filename),
-					zap.Error(err))
-				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-					"success": false,
-					"message": fmt.Sprintf("Failed to upload document: %s", mapping.fileHeader.Filename),
-					"error":   err.Error(),
-				})
+					zap.String("category", mapping.category))
+
+				// Track if receipt was provided
+				if mapping.category == "PROCESSED_RECEIPT" {
+					receiptProvided = true
+				}
 			}
 
-			uploadedDocuments = append(uploadedDocuments, mapping.fileHeader.Filename)
-
-			// Track if receipt was provided
-			if mapping.category == "PROCESSED_RECEIPT" {
-				receiptProvided = true
-			}
+			// Only update the flag if we have a file OR explicit flag
+			updates[mapping.flagField] = flagValue
+			config.Logger.Info("Flag updated",
+				zap.String("field", mapping.flagField),
+				zap.Bool("value", flagValue),
+				zap.Bool("fileProvided", fileProvided),
+				zap.Bool("flagExplicitlySet", flagExplicitlySet))
+		} else {
+			config.Logger.Info("Skipping field - no file or explicit flag",
+				zap.String("field", mapping.flagField))
 		}
-
-		// Update the flag value (true if file was provided OR flag was explicitly set)
-		updates[mapping.flagField] = flagValue
 	}
 
-	// Handle payment creation if receipt is provided
-	if receiptProvided && req.ReceiptNumber != "" && req.ReceiptDate != "" {
+	// Handle payment creation if receipt details are provided (with or without file)
+	paymentCreated := false
+	if req.ReceiptNumber != "" && req.ReceiptDate != "" {
+		config.Logger.Info("Processing payment creation",
+			zap.String("receiptNumber", req.ReceiptNumber),
+			zap.Bool("receiptFileProvided", receiptProvided))
+
 		payment, err := ac.createPaymentRecordFromReceipt(tx, &application, req, updatedByStr)
 		if err != nil {
 			tx.Rollback()
@@ -219,21 +248,25 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 		updates["payment_status"] = models.PaidPayment
 		now := time.Now()
 		updates["payment_completed_at"] = &now
+		paymentCreated = true
 
 		config.Logger.Info("Payment record created from receipt",
 			zap.String("paymentID", payment.ID.String()),
 			zap.String("receiptNumber", payment.ReceiptNumber),
 			zap.String("amount", payment.Amount.String()))
+	} else {
+		config.Logger.Info("Skipping payment creation - missing receipt details")
 	}
 
-	// Update all documents provided flag
-	ac.updateAllDocumentsProvidedFlag(&application, updates)
+	// Only update calculated flags if we have relevant updates
+	if len(updates) > 1 { // More than just updated_by
+		ac.updateAllDocumentsProvidedFlag(&application, updates)
+		ac.updateReadyForReviewFlag(&application, updates)
+	}
 
-	// Update ready for review flag
-	ac.updateReadyForReviewFlag(&application, updates)
-
-	// Apply updates to application
-	if len(updates) > 0 {
+	// Apply updates to application only if we have updates beyond updated_by
+	if len(updates) > 1 {
+		config.Logger.Info("Applying updates to application", zap.Any("updates", updates))
 		if err := tx.Model(&application).Updates(updates).Error; err != nil {
 			tx.Rollback()
 			config.Logger.Error("Failed to update application",
@@ -245,9 +278,11 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 				"error":   err.Error(),
 			})
 		}
+	} else {
+		config.Logger.Info("No updates to apply beyond updated_by")
 	}
 
-	// Commit transaction - if this fails, everything rolls back automatically
+	// Commit transaction
 	if err := tx.Commit().Error; err != nil {
 		config.Logger.Error("Failed to commit transaction", zap.Error(err))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -257,10 +292,10 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 		})
 	}
 
-	config.Logger.Info("Application documents uploaded successfully",
+	config.Logger.Info("Application documents processed successfully",
 		zap.String("applicationID", applicationID),
 		zap.Int("documentsUploaded", len(uploadedDocuments)),
-		zap.Bool("paymentCreated", receiptProvided && req.ReceiptNumber != ""))
+		zap.Bool("paymentCreated", paymentCreated))
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"success": true,
@@ -268,7 +303,7 @@ func (ac *ApplicationController) ProcessApplicationSubmissionController(c *fiber
 		"data": fiber.Map{
 			"application_id":     applicationID,
 			"uploaded_documents": uploadedDocuments,
-			"payment_created":    receiptProvided && req.ReceiptNumber != "",
+			"payment_created":    paymentCreated,
 			"updated_flags":      updates,
 			"processed_at":       time.Now().Format(time.RFC3339),
 		},
@@ -313,6 +348,11 @@ func (ac *ApplicationController) createPaymentRecordFromReceipt(
 
 	if err == nil {
 		// Payment exists, update it
+		config.Logger.Info("Updating existing payment record",
+			zap.String("paymentID", existingPayment.ID.String()),
+			zap.String("oldReceiptNumber", existingPayment.ReceiptNumber),
+			zap.String("newReceiptNumber", req.ReceiptNumber))
+
 		existingPayment.ReceiptNumber = req.ReceiptNumber
 		existingPayment.PaymentDate = receiptDate
 		existingPayment.Amount = amount
@@ -322,10 +362,6 @@ func (ac *ApplicationController) createPaymentRecordFromReceipt(
 		if err := tx.Save(&existingPayment).Error; err != nil {
 			return nil, fmt.Errorf("failed to update payment record: %w", err)
 		}
-
-		config.Logger.Info("Payment record updated",
-			zap.String("paymentID", existingPayment.ID.String()),
-			zap.String("receiptNumber", existingPayment.ReceiptNumber))
 
 		return &existingPayment, nil
 	} else if err != gorm.ErrRecordNotFound {
@@ -355,6 +391,10 @@ func (ac *ApplicationController) createPaymentRecordFromReceipt(
 	if err := tx.Create(&payment).Error; err != nil {
 		return nil, fmt.Errorf("failed to create payment record: %w", err)
 	}
+
+	config.Logger.Info("New payment record created",
+		zap.String("paymentID", payment.ID.String()),
+		zap.String("receiptNumber", payment.ReceiptNumber))
 
 	return &payment, nil
 }
@@ -387,6 +427,13 @@ func (ac *ApplicationController) updateAllDocumentsProvidedFlag(
 		now := time.Now()
 		updates["documents_completed_at"] = &now
 	}
+
+	config.Logger.Info("Documents provided status",
+		zap.Bool("processedReceipt", processedReceipt),
+		zap.Bool("initialPlan", initialPlan),
+		zap.Bool("tpd1Form", tpd1Form),
+		zap.Bool("quotation", quotation),
+		zap.Bool("allDocsProvided", allDocsProvided))
 }
 
 // updateReadyForReviewFlag checks if application is ready for review
@@ -418,4 +465,9 @@ func (ac *ApplicationController) updateReadyForReviewFlag(
 		now := time.Now()
 		updates["review_started_at"] = &now
 	}
+
+	config.Logger.Info("Review readiness status",
+		zap.String("paymentStatus", string(paymentStatus)),
+		zap.Bool("allDocsProvided", allDocsProvided),
+		zap.Bool("readyForReview", readyForReview))
 }
