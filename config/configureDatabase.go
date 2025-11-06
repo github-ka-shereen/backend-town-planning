@@ -62,7 +62,14 @@ var allModels = []interface{}{
 	&models.FinalApproval{},
 	&models.Comment{},
 
-	// 9. NEW: Document Join Tables (must come after Document and related entities)
+	// 9. NEW: Chat System Models (add before document join tables)
+	&models.ChatThread{},
+	&models.ChatParticipant{},
+	&models.ChatMessage{},
+	&models.ReadReceipt{},
+	&models.ChatAttachment{},
+
+	// 10. Document Join Tables (must come after Document and related entities)
 	&models.ApplicantDocument{},
 	&models.ApplicationDocument{},
 	&models.StandDocument{},
@@ -70,15 +77,16 @@ var allModels = []interface{}{
 	&models.CommentDocument{},
 	&models.PaymentDocument{},
 	&models.EmailDocument{},
-	&models.BankDocument{}, // NEW
-	&models.UserDocument{}, // NEW
+	&models.BankDocument{},
+	&models.UserDocument{},
+	&models.ChatAttachment{}, // This references Document, so it should be here
 
-	// 10. Other models that reference the above
+	// 11. Other models that reference the above
 	&models.AllStandOwners{},
 	&models.Reservation{},
 	&models.EmailLog{},
 
-	// 11. Bulk Upload Error Models
+	// 12. Bulk Upload Error Models
 	&models.BulkUploadErrorProjects{},
 	&models.BulkUploadErrorStands{},
 	&models.BulkStandUploadError{},

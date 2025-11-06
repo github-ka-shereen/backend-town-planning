@@ -2,15 +2,15 @@ package controllers
 
 import (
 	"fmt"
-	"town-planning-backend/config"
-	"town-planning-backend/db/models"
-	"town-planning-backend/token"
 
 	"github.com/gofiber/fiber/v2"
 	"go.uber.org/zap"
+
+	"town-planning-backend/config"
+	"town-planning-backend/token"
 )
 
-// RaiseIssue handles raising an issue for an application
+// RaiseIssue handles raising an issue for an application with chat thread creation
 func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	var request RaiseIssueRequest
 	applicationID := c.Params("id")
@@ -46,22 +46,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		})
 	}
 
-	// Validate assignment type
-	assignmentType := models.IssueAssignmentType(request.AssignmentType)
-
-	switch assignmentType {
-	case models.IssueAssignment_COLLABORATIVE,
-		models.IssueAssignment_GROUP_MEMBER,
-		models.IssueAssignment_SPECIFIC_USER:
-		// valid
-	default:
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
-			"success": false,
-			"message": "Invalid assignment type",
-		})
-	}
-
-	// Get user from context (set by authentication middleware)
+	// Get user from context
 	payload, ok := c.Locals("user").(*token.Payload)
 	if !ok || payload == nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
@@ -69,9 +54,6 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 			"message": "User not authenticated",
 		})
 	}
-
-	config.Logger.Info("User authenticated",
-		zap.Any("payload", payload))
 
 	userUUID := payload.UserID
 
@@ -100,8 +82,8 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		}
 	}()
 
-	// Process issue creation
-	issue, err := ac.ApplicationRepo.RaiseApplicationIssue(
+	// Process issue creation with chat thread
+	issue, chatThread, err := ac.ApplicationRepo.RaiseApplicationIssueWithChat(
 		tx,
 		applicationID,
 		userUUID,
@@ -147,17 +129,19 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		})
 	}
 
-	config.Logger.Info("Issue raised successfully",
+	config.Logger.Info("Issue raised successfully with chat thread",
 		zap.String("applicationID", applicationID),
 		zap.String("userID", userUUID.String()),
 		zap.String("issueID", issue.ID.String()),
+		zap.String("chatThreadID", chatThread.ID.String()),
 		zap.String("assignmentType", string(request.AssignmentType)))
 
 	response := fiber.Map{
 		"success": true,
 		"message": "Issue raised successfully",
 		"data": fiber.Map{
-			"issue": issue,
+			"issue":      issue,
+			"chatThread": chatThread,
 		},
 	}
 

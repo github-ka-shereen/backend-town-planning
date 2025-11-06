@@ -109,7 +109,8 @@ type Document struct {
 	EmailDocuments       []EmailDocument       `gorm:"foreignKey:DocumentID" json:"email_documents,omitempty"`
 	BankDocuments        []BankDocument        `gorm:"foreignKey:DocumentID" json:"bank_documents,omitempty"`
 	UserDocuments        []UserDocument        `gorm:"foreignKey:DocumentID" json:"user_documents,omitempty"`
-
+	ChatAttachments      []ChatAttachment      `gorm:"foreignKey:DocumentID" json:"chat_attachments,omitempty"`
+	
 	// Audit fields
 	CreatedBy string         `gorm:"not null" json:"created_by"`
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

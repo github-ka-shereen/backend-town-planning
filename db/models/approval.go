@@ -264,6 +264,12 @@ type ApplicationIssue struct {
 	// NULL for COLLABORATIVE and SPECIFIC_USER modes
 	AssignedToGroupMemberID *uuid.UUID `gorm:"type:uuid;index" json:"assigned_to_group_member_id"`
 
+	// Chat thread reference
+	ChatThreadID *uuid.UUID `gorm:"type:uuid;index" json:"chat_thread_id"`
+
+	// Enhanced relationships
+	ChatThread *ChatThread `gorm:"foreignKey:ChatThreadID" json:"chat_thread,omitempty"`
+
 	// ========================================
 	// ISSUE DETAILS
 	// ========================================
