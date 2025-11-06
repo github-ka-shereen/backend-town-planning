@@ -17,7 +17,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 type DocumentServiceInterface interface {
 	UnifiedCreateDocument(
 		tx *gorm.DB,
@@ -81,8 +80,8 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		}
 
 		// Use your existing document service
-		_, err := r.documentSvc.UnifiedCreateDocument(
-			tx,
+		response, err := r.documentSvc.UnifiedCreateDocument(
+			tx, // Use the same transaction
 			c,
 			documentRequest,
 			nil, // No file content bytes, we'll use the multipart file
@@ -98,14 +97,11 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 			continue
 		}
 
-		// Since we can't get the document ID from the response, we need to query for it
-		// This assumes your document service creates the document in the same transaction
-		document, err := r.findLatestDocumentByFileName(tx, fileHeader.Filename, createdBy)
-		if err != nil {
-			errorMsg := fmt.Sprintf("failed to find created document for %s: %v", fileHeader.Filename, err)
+		// FIXED: Use the Document from the response directly
+		if response.Document == nil {
+			errorMsg := fmt.Sprintf("document response is nil for %s", fileHeader.Filename)
 			attachmentErrors = append(attachmentErrors, errorMsg)
-			config.Logger.Error("Failed to find created document",
-				zap.Error(err),
+			config.Logger.Error("Document response is nil",
 				zap.String("filename", fileHeader.Filename))
 			continue
 		}
@@ -114,7 +110,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		chatAttachment := models.ChatAttachment{
 			ID:         uuid.New(),
 			MessageID:  message.ID,
-			DocumentID: document.ID,
+			DocumentID: response.Document.ID,
 		}
 
 		if err := tx.Create(&chatAttachment).Error; err != nil {
@@ -122,27 +118,27 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 			attachmentErrors = append(attachmentErrors, errorMsg)
 			config.Logger.Error("Failed to create chat attachment",
 				zap.Error(err),
-				zap.String("documentID", document.ID.String()),
+				zap.String("documentID", response.Document.ID.String()),
 				zap.String("filename", fileHeader.Filename))
 			continue
 		}
 
-		// FIXED: Convert file size to string directly (decimal.Decimal has String() method)
-		fileSizeStr := document.FileSize.String()
+		// Convert file size to string
+		fileSizeStr := response.Document.FileSize
 
 		attachments = append(attachments, &ChatAttachmentSummary{
 			ID:        chatAttachment.ID,
-			FileName:  document.FileName,
-			FileSize:  fileSizeStr,
-			FileType:  string(document.DocumentType),
-			MimeType:  document.MimeType,
-			FilePath:  document.FilePath,
-			CreatedAt: document.CreatedAt.Format(time.RFC3339),
+			FileName:  response.Document.FileName,
+			FileSize:  fileSizeStr.String(),
+			FileType:  string(response.Document.DocumentType),
+			MimeType:  response.Document.MimeType,
+			FilePath:  response.Document.FilePath,
+			CreatedAt: string(response.Document.CreatedAt.Format(time.RFC3339)),
 		})
 
 		config.Logger.Info("Chat attachment created successfully",
 			zap.String("filename", fileHeader.Filename),
-			zap.String("documentID", document.ID.String()),
+			zap.String("documentID", response.Document.ID.String()),
 			zap.String("messageID", message.ID.String()),
 			zap.String("chatAttachmentID", chatAttachment.ID.String()))
 	}
@@ -156,9 +152,9 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 			zap.Int("failedAttachments", len(attachmentErrors)))
 	}
 
-	// Get the complete message with preloaded relationships
+	// Use the same transaction to load the complete message
 	var completeMessage models.ChatMessage
-	if err := r.db.
+	if err := tx.
 		Preload("Sender").
 		Preload("Sender.Role").
 		Preload("Sender.Department").
@@ -169,11 +165,10 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		return nil, fmt.Errorf("failed to load complete message: %w", err)
 	}
 
-	// Build attachments from preloaded data (in case some were created outside the transaction)
+	// Build attachments from preloaded data (in case some attachments were created but we couldn't build summaries)
 	if len(completeMessage.Attachments) > 0 && len(attachments) == 0 {
 		attachments = make([]*ChatAttachmentSummary, len(completeMessage.Attachments))
 		for i, attachment := range completeMessage.Attachments {
-			// FIXED: Use direct String() method for decimal.Decimal
 			fileSizeStr := attachment.Document.FileSize.String()
 
 			attachments[i] = &ChatAttachmentSummary{
@@ -190,7 +185,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 
 	// Convert to enhanced format
 	enhancedMessage := &EnhancedChatMessage{
-		ID:          completeMessage.ID,
+		ID:          completeMessage.ID, // This is already uuid.UUID
 		Content:     completeMessage.Content,
 		MessageType: completeMessage.MessageType,
 		Status:      completeMessage.Status,
@@ -199,7 +194,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		IsDeleted:   completeMessage.IsDeleted,
 		CreatedAt:   completeMessage.CreatedAt.Format(time.RFC3339),
 		Sender: &UserSummary{
-			ID:        completeMessage.Sender.ID,
+			ID:        completeMessage.Sender.ID, // This is already uuid.UUID
 			FirstName: completeMessage.Sender.FirstName,
 			LastName:  completeMessage.Sender.LastName,
 			Email:     completeMessage.Sender.Email,
@@ -210,24 +205,13 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 				return nil
 			}()),
 		},
-		ParentID:    completeMessage.ParentID,
+		ParentID:    completeMessage.ParentID, // Just assign directly, no conversion needed
 		Attachments: attachments,
 	}
 
 	return enhancedMessage, nil
 }
 
-// findLatestDocumentByFileName finds the most recent document by filename and creator
-func (r *applicationRepository) findLatestDocumentByFileName(tx *gorm.DB, fileName, createdBy string) (*models.Document, error) {
-	var document models.Document
-	if err := tx.
-		Where("file_name = ? AND created_by = ?", fileName, createdBy).
-		Order("created_at DESC").
-		First(&document).Error; err != nil {
-		return nil, fmt.Errorf("failed to find document: %w", err)
-	}
-	return &document, nil
-}
 
 // GetChatMessagesWithPreload gets messages with all relationships preloaded
 func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limit, offset int) ([]*EnhancedChatMessage, int, error) {
@@ -321,23 +305,4 @@ func (r *applicationRepository) GetChatThreadByIssueID(issueID uuid.UUID) (*mode
 	return &thread, nil
 }
 
-// AddParticipantToThread adds a user to a chat thread
-func (r *applicationRepository) AddParticipantToThread(
-	threadID uuid.UUID,
-	userID uuid.UUID,
-	role models.ParticipantRole,
-	addedBy string,
-) error {
 
-	participant := models.ChatParticipant{
-		ID:       uuid.New(),
-		ThreadID: threadID,
-		UserID:   userID,
-		Role:     role,
-		IsActive: true,
-		AddedBy:  addedBy,
-		AddedAt:  time.Now(),
-	}
-
-	return r.db.Create(&participant).Error
-}

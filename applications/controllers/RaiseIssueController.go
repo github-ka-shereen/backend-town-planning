@@ -253,13 +253,6 @@ func (ac *ApplicationController) processChatAttachments(
 	return documentIDs, nil
 }
 
-// Helper functions for form parsing
-func getFormValue(form *multipart.Form, key string) string {
-	if values, exists := form.Value[key]; exists && len(values) > 0 {
-		return values[0]
-	}
-	return ""
-}
 
 func getFormValuePtr(form *multipart.Form, key string) *string {
 	if values, exists := form.Value[key]; exists && len(values) > 0 && values[0] != "" {

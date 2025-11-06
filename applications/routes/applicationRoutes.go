@@ -76,6 +76,13 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
 	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
 	applicationRoutes.Post("/applications/:id/raise-issue", applicationController.RaiseIssueController)
+	applicationRoutes.Post("/chat/threads/:threadId/messages", applicationController.SendMessageController)
+
+	// Unified Chat Participants Management (SINGLE ENDPOINT)
+	applicationRoutes.Post("/chat/threads/:threadId/participants", applicationController.UnifiedParticipantController)
+
+	// Get Thread Participants (Separate GET endpoint)
+	applicationRoutes.Get("/chat/threads/:threadId/participants", applicationController.GetThreadParticipantsController)
 
 	// New approval workflow endpoints
 	// applicationRoutes.Post("/applications/:id/assign-group", applicationController.AssignApplicationToGroupController)

@@ -207,6 +207,6 @@ type OperationError struct {
 }
 
 type CreateDocumentResponse struct {
-	Document *DocumentResponse `json:"document"`
-	Message  string            `json:"message"`
+	Document   *DocumentResponse `json:"document"`
+	Message    string            `json:"message"`
 }

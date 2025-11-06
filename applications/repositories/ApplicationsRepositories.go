@@ -2,11 +2,14 @@
 package repositories
 
 import (
+	"mime/multipart"
 	"strings"
 	"time"
 	"town-planning-backend/db/models"
 	documents_services "town-planning-backend/documents/services"
+	"town-planning-backend/applications/requests"
 
+	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
 	"gorm.io/gorm"
@@ -57,6 +60,13 @@ type ApplicationRepository interface {
 	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
 	RaiseApplicationIssueWithChatAndAttachments(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID, attachmentDocumentIDs []uuid.UUID, createdBy string) (*models.ApplicationIssue, *models.ChatThread, error)
 	GetChatMessagesWithPreload(threadID string, limit, offset int) ([]*EnhancedChatMessage, int, error)
+	CreateMessageWithAttachments(tx *gorm.DB, c *fiber.Ctx, threadID string, content string, messageType models.ChatMessageType, senderID uuid.UUID, files []*multipart.FileHeader, applicationID *uuid.UUID, createdBy string) (*EnhancedChatMessage, error)
+	AddParticipantToThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, role models.ParticipantRole, addedBy string) error
+	RemoveParticipantFromThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, removedBy string) error
+	CanUserManageParticipants(threadID string, userID uuid.UUID) (bool, error)
+	GetThreadParticipants(threadID string) ([]models.ChatParticipant, error)
+	RemoveMultipleParticipantsFromThread(tx *gorm.DB, threadID uuid.UUID, userIDs []uuid.UUID, removedBy string) (int, error)
+	AddMultipleParticipantsToThread(tx *gorm.DB, threadID uuid.UUID, participants []requests.ParticipantRequest, addedBy string) ([]models.ChatParticipant, error)
 }
 
 type applicationRepository struct {
