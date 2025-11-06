@@ -10,7 +10,7 @@ func (pc *ApplicationController) GetApplicationApprovalDataController(c *fiber.C
 	applicationID := c.Params("id")
 
 	// Fetch the Application from the repository using the ID
-	application, err := pc.ApplicationRepo.GetDataForApplicationApproval(applicationID)
+	application, err := pc.ApplicationRepo.GetEnhancedApplicationApprovalData(applicationID)
 	if err != nil {
 		// If the Application is not found or an error occurs, return an error response
 		return c.Status(404).JSON(fiber.Map{
@@ -23,6 +23,6 @@ func (pc *ApplicationController) GetApplicationApprovalDataController(c *fiber.C
 	return c.JSON(fiber.Map{
 		"message": "Application approval data retrieved successfully",
 		"data":    application,
-		"error":   nil,	
+		"error":   nil,
 	})
 }

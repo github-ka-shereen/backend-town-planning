@@ -154,3 +154,43 @@ type ChatAttachment struct {
 
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
+
+// BeforeCreate hook for ChatThread
+func (ct *ChatThread) BeforeCreate(tx *gorm.DB) error {
+	if ct.ID == uuid.Nil {
+		ct.ID = uuid.New()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ChatParticipant
+func (cp *ChatParticipant) BeforeCreate(tx *gorm.DB) error {
+	if cp.ID == uuid.Nil {
+		cp.ID = uuid.New()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ChatMessage
+func (cm *ChatMessage) BeforeCreate(tx *gorm.DB) error {
+	if cm.ID == uuid.Nil {
+		cm.ID = uuid.New()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ReadReceipt
+func (rr *ReadReceipt) BeforeCreate(tx *gorm.DB) error {
+	if rr.ID == uuid.Nil {
+		rr.ID = uuid.New()
+	}
+	return nil
+}
+
+// BeforeCreate hook for ChatAttachment
+func (ca *ChatAttachment) BeforeCreate(tx *gorm.DB) error {
+	if ca.ID == uuid.Nil {
+		ca.ID = uuid.New()
+	}
+	return nil
+}

@@ -5,12 +5,12 @@ import (
 )
 
 type CreateDocumentRequest struct {
-	FileName       string     `json:"file_name"`
-	FileSize       string     `json:"file_size"`
-	CategoryCode   string     `json:"category_code"`
+	FileName           string     `json:"file_name"`
+	FileSize           string     `json:"file_size"`
+	CategoryCode       string     `json:"category_code"`
 	DocumentCategoryId *uuid.UUID `json:"document_category_id"`
-	CreatedBy      string     `json:"created_by"`
-	FileType       string     `json:"file_type"`
+	CreatedBy          string     `json:"created_by"`
+	FileType           string     `json:"file_type"`
 
 	// Entity relationships - support for all 9 join table entities
 	ApplicantID   *uuid.UUID `json:"applicant_id,omitempty"`
@@ -30,8 +30,8 @@ type CreateDocumentRequest struct {
 }
 
 type LinkDocumentRequest struct {
-	DocumentID    uuid.UUID  `json:"document_id"`
-	CreatedBy     string     `json:"created_by"`
+	DocumentID uuid.UUID `json:"document_id"`
+	CreatedBy  string    `json:"created_by"`
 
 	// Entity relationships - support for all 9 join table entities
 	ApplicantID   *uuid.UUID `json:"applicant_id,omitempty"`
@@ -51,11 +51,11 @@ type LinkDocumentRequest struct {
 }
 
 type GetDocumentsByEntityRequest struct {
-	EntityType string    `json:"entity_type"` 
-	// Supported entity types: 
-	// "applicant", "application", "stand", "project", 
+	EntityType string `json:"entity_type"`
+	// Supported entity types:
+	// "applicant", "application", "stand", "project",
 	// "payment", "comment", "email", "bank", "user"
-	EntityID   uuid.UUID `json:"entity_id"`
+	EntityID uuid.UUID `json:"entity_id"`
 }
 
 type CreateDocumentVersionRequest struct {
@@ -116,38 +116,38 @@ type BulkDocumentItem struct {
 
 // NEW: Request for document statistics
 type DocumentStatsRequest struct {
-	EntityType  *string    `json:"entity_type,omitempty"`
-	EntityID    *uuid.UUID `json:"entity_id,omitempty"`
-	CategoryCode *string   `json:"category_code,omitempty"`
-	DateFrom    *string    `json:"date_from,omitempty"`
-	DateTo      *string    `json:"date_to,omitempty"`
+	EntityType   *string    `json:"entity_type,omitempty"`
+	EntityID     *uuid.UUID `json:"entity_id,omitempty"`
+	CategoryCode *string    `json:"category_code,omitempty"`
+	DateFrom     *string    `json:"date_from,omitempty"`
+	DateTo       *string    `json:"date_to,omitempty"`
 }
 
 // NEW: Request for document download with options
 type DownloadDocumentRequest struct {
 	DocumentID uuid.UUID `json:"document_id"`
 	// Optional: Specify if you want a specific version
-	Version    *int      `json:"version,omitempty"`
+	Version *int `json:"version,omitempty"`
 	// Optional: Watermark or other processing options
-	Watermark  *bool     `json:"watermark,omitempty"`
+	Watermark *bool `json:"watermark,omitempty"`
 }
 
 // NEW: Request for document sharing
 type ShareDocumentRequest struct {
-	DocumentID   uuid.UUID `json:"document_id"`
-	ShareWith    []string  `json:"share_with"` // Emails or user IDs
-	AccessLevel  string    `json:"access_level" validate:"oneof=view download"`
-	ExpiresAt    *string   `json:"expires_at,omitempty"` // ISO date string
-	Message      *string   `json:"message,omitempty"`
-	SharedBy     string    `json:"shared_by"`
+	DocumentID  uuid.UUID `json:"document_id"`
+	ShareWith   []string  `json:"share_with"` // Emails or user IDs
+	AccessLevel string    `json:"access_level" validate:"oneof=view download"`
+	ExpiresAt   *string   `json:"expires_at,omitempty"` // ISO date string
+	Message     *string   `json:"message,omitempty"`
+	SharedBy    string    `json:"shared_by"`
 }
 
 // NEW: Request for document access control
 type UpdateDocumentAccessRequest struct {
-	DocumentID   uuid.UUID `json:"document_id"`
-	UserID       uuid.UUID `json:"user_id"`
-	AccessLevel  string    `json:"access_level" validate:"oneof=view download none"`
-	UpdatedBy    string    `json:"updated_by"`
+	DocumentID  uuid.UUID `json:"document_id"`
+	UserID      uuid.UUID `json:"user_id"`
+	AccessLevel string    `json:"access_level" validate:"oneof=view download none"`
+	UpdatedBy   string    `json:"updated_by"`
 }
 
 // NEW: Request for document categorization
@@ -159,24 +159,24 @@ type CategorizeDocumentsRequest struct {
 
 // NEW: Request for document archiving
 type ArchiveDocumentsRequest struct {
-	DocumentIDs []uuid.UUID `json:"document_ids"`
-	ArchiveReason *string   `json:"archive_reason,omitempty"`
-	ArchivedBy  string      `json:"archived_by"`
+	DocumentIDs   []uuid.UUID `json:"document_ids"`
+	ArchiveReason *string     `json:"archive_reason,omitempty"`
+	ArchivedBy    string      `json:"archived_by"`
 }
 
 // Response structures (for completeness)
 type DocumentResponse struct {
-	ID           uuid.UUID `json:"id"`
-	FileName     string    `json:"file_name"`
-	FileSize     string    `json:"file_size"`
-	DocumentType string    `json:"document_type"`
-	CategoryCode string    `json:"category_code"`
-	CreatedAt    string    `json:"created_at"`
-	CreatedBy    string    `json:"created_by"`
-	IsPublic     bool      `json:"is_public"`
-	IsMandatory  bool      `json:"is_mandatory"`
-	Version      int       `json:"version"`
-	IsCurrentVersion bool  `json:"is_current_version"`
+	ID               uuid.UUID `json:"id"`
+	FileName         string    `json:"file_name"`
+	FileSize         string    `json:"file_size"`
+	DocumentType     string    `json:"document_type"`
+	CategoryCode     string    `json:"category_code"`
+	CreatedAt        string    `json:"created_at"`
+	CreatedBy        string    `json:"created_by"`
+	IsPublic         bool      `json:"is_public"`
+	IsMandatory      bool      `json:"is_mandatory"`
+	Version          int       `json:"version"`
+	IsCurrentVersion bool      `json:"is_current_version"`
 	// Entity relationships
 	LinkedEntities []LinkedEntity `json:"linked_entities,omitempty"`
 }
@@ -188,11 +188,11 @@ type LinkedEntity struct {
 }
 
 type DocumentStatsResponse struct {
-	TotalDocuments   int64 `json:"total_documents"`
-	TotalSizeBytes   int64 `json:"total_size_bytes"`
-	ByCategory       map[string]int64 `json:"by_category"`
-	ByType           map[string]int64 `json:"by_type"`
-	RecentUploads    int64 `json:"recent_uploads"` // Last 7 days
+	TotalDocuments int64            `json:"total_documents"`
+	TotalSizeBytes int64            `json:"total_size_bytes"`
+	ByCategory     map[string]int64 `json:"by_category"`
+	ByType         map[string]int64 `json:"by_type"`
+	RecentUploads  int64            `json:"recent_uploads"` // Last 7 days
 }
 
 type BulkOperationResponse struct {
@@ -204,4 +204,9 @@ type BulkOperationResponse struct {
 type OperationError struct {
 	DocumentID *uuid.UUID `json:"document_id,omitempty"`
 	Error      string     `json:"error"`
+}
+
+type CreateDocumentResponse struct {
+	Document *DocumentResponse `json:"document"`
+	Message  string            `json:"message"`
 }

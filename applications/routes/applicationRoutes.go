@@ -69,10 +69,13 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
 
+	// Chat Messages - ADDED THIS ROUTE
+	applicationRoutes.Get("/chat/threads/:threadId/messages", applicationController.GetChatMessagesController)
+
 	// Approval Workflow - Use POST for actions that change state
 	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
 	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
-	applicationRoutes.Post("/applications/:id/issues", applicationController.RaiseIssueController)
+	applicationRoutes.Post("/applications/:id/raise-issue", applicationController.RaiseIssueController)
 
 	// New approval workflow endpoints
 	// applicationRoutes.Post("/applications/:id/assign-group", applicationController.AssignApplicationToGroupController)

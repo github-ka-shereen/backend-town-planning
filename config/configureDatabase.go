@@ -58,16 +58,16 @@ var allModels = []interface{}{
 	&models.ApprovalGroupMember{},
 	&models.ApplicationGroupAssignment{},
 	&models.MemberApprovalDecision{},
-	&models.ApplicationIssue{},
+	&models.ApplicationIssue{}, // MUST come BEFORE ChatThread
 	&models.FinalApproval{},
 	&models.Comment{},
 
-	// 9. NEW: Chat System Models (add before document join tables)
-	&models.ChatThread{},
-	&models.ChatParticipant{},
-	&models.ChatMessage{},
-	&models.ReadReceipt{},
-	&models.ChatAttachment{},
+	// 9. NEW: Chat System Models (MUST come after ApplicationIssue)
+	&models.ChatThread{},      // References ApplicationIssue
+	&models.ChatParticipant{}, // References ChatThread
+	&models.ChatMessage{},     // References ChatThread
+	&models.ReadReceipt{},     // References ChatMessage
+	&models.ChatAttachment{},  // References ChatMessage and Document
 
 	// 10. Document Join Tables (must come after Document and related entities)
 	&models.ApplicantDocument{},
@@ -79,7 +79,7 @@ var allModels = []interface{}{
 	&models.EmailDocument{},
 	&models.BankDocument{},
 	&models.UserDocument{},
-	&models.ChatAttachment{}, // This references Document, so it should be here
+	// &models.ChatAttachment{}, // REMOVE DUPLICATE - already in chat system section
 
 	// 11. Other models that reference the above
 	&models.AllStandOwners{},

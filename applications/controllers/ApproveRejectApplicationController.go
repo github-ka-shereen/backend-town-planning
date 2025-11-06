@@ -3,6 +3,7 @@ package controllers
 
 import (
 	"fmt"
+	"mime/multipart"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 	"town-planning-backend/token"
@@ -13,14 +14,14 @@ import (
 )
 
 type ApproveApplicationRequest struct {
-	Comment       *string            `json:"comment"`
-	CommentType   models.CommentType `json:"comment_type"`
+	Comment     *string            `json:"comment"`
+	CommentType models.CommentType `json:"comment_type"`
 }
 
 type RejectApplicationRequest struct {
-	Reason        string             `json:"reason"`
-	Comment       *string            `json:"comment"`
-	CommentType   models.CommentType `json:"comment_type"`
+	Reason      string             `json:"reason"`
+	Comment     *string            `json:"comment"`
+	CommentType models.CommentType `json:"comment_type"`
 }
 
 type RaiseIssueRequest struct {
@@ -31,6 +32,7 @@ type RaiseIssueRequest struct {
 	AssignmentType          models.IssueAssignmentType `json:"assignment_type"`
 	AssignedToUserID        *uuid.UUID                 `json:"assigned_to_user_id"`
 	AssignedToGroupMemberID *uuid.UUID                 `json:"assigned_to_group_member_id"`
+	Attachments             []*multipart.FileHeader    `form:"attachments"` // This is how Gin handles file uploads
 }
 
 type ResolveIssueRequest struct {

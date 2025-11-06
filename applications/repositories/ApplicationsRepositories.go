@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 	"town-planning-backend/db/models"
+	documents_services "town-planning-backend/documents/services"
 
 	"github.com/google/uuid"
 	"github.com/shopspring/decimal"
@@ -50,19 +51,21 @@ type ApplicationRepository interface {
 	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
 
 	// Approval workflow methods
-	GetDataForApplicationApproval(applicationID string) (map[string]interface{}, error)
+	GetEnhancedApplicationApprovalData(applicationID string) (*ApplicationApprovalData, error)
 	ProcessApplicationApproval(tx *gorm.DB, applicationID string, userID uuid.UUID, comment *string, commentType models.CommentType) (*ApprovalResult, error)
 	ProcessApplicationRejection(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string, comment *string, commentType models.CommentType) (*RejectionResult, error)
 	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
-	RaiseApplicationIssueWithChat(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, *models.ChatThread, error)
+	RaiseApplicationIssueWithChatAndAttachments(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID, attachmentDocumentIDs []uuid.UUID, createdBy string) (*models.ApplicationIssue, *models.ChatThread, error)
+	GetChatMessagesWithPreload(threadID string, limit, offset int) ([]*EnhancedChatMessage, int, error)
 }
 
 type applicationRepository struct {
-	db *gorm.DB
+	documentSvc *documents_services.DocumentService
+	db          *gorm.DB
 }
 
-func NewApplicationRepository(db *gorm.DB) ApplicationRepository {
-	return &applicationRepository{db: db}
+func NewApplicationRepository(db *gorm.DB, documentSvc *documents_services.DocumentService) ApplicationRepository {
+	return &applicationRepository{db: db, documentSvc: documentSvc}
 }
 
 // CreateApprovalGroup creates a new approval group with its members

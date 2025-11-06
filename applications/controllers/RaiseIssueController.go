@@ -2,27 +2,45 @@ package controllers
 
 import (
 	"fmt"
+	"mime/multipart"
+	"town-planning-backend/config"
+	"town-planning-backend/db/models"
+	documents_requests "town-planning-backend/documents/requests"
+	"town-planning-backend/token"
 
 	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
 	"go.uber.org/zap"
-
-	"town-planning-backend/config"
-	"town-planning-backend/token"
+	"gorm.io/gorm"
 )
 
-// RaiseIssue handles raising an issue for an application with chat thread creation
+// RaiseIssue handles raising an issue for an application with chat thread creation and file attachments
 func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
-	var request RaiseIssueRequest
 	applicationID := c.Params("id")
 
-	// Parse incoming JSON payload
-	if err := c.BodyParser(&request); err != nil {
+	// Parse multipart form instead of JSON
+	form, err := c.MultipartForm()
+	if err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"success": false,
-			"message": "Invalid request payload",
+			"message": "Invalid form data",
 			"error":   err.Error(),
 		})
 	}
+
+	// Extract form values
+	request := RaiseIssueRequest{
+		Title:                   getFormValue(form, "title"),
+		Description:             getFormValue(form, "description"),
+		Priority:                getFormValue(form, "priority"),
+		Category:                getFormValuePtr(form, "category"),
+		AssignmentType:          models.IssueAssignmentType(getFormValue(form, "assignment_type")),
+		AssignedToUserID:        getUUIDPtrFromForm(form, "assigned_to_user_id"),
+		AssignedToGroupMemberID: getUUIDPtrFromForm(form, "assigned_to_group_member_id"),
+	}
+
+	// Get uploaded files
+	files := form.File["attachments"]
 
 	// Validate required fields
 	if applicationID == "" {
@@ -57,6 +75,14 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 
 	userUUID := payload.UserID
 
+	user, err := ac.UserRepo.GetUserByID(userUUID.String())
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"success": false,
+			"message": "User not found",
+		})
+	}
+
 	// --- Start Database Transaction ---
 	tx := ac.DB.Begin()
 	if tx.Error != nil {
@@ -82,8 +108,27 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		}
 	}()
 
-	// Process issue creation with chat thread
-	issue, chatThread, err := ac.ApplicationRepo.RaiseApplicationIssueWithChat(
+	// ========================================
+	// PROCESS FILE ATTACHMENTS IN CONTROLLER
+	// ========================================
+	var attachmentDocumentIDs []uuid.UUID
+	if len(files) > 0 {
+		attachmentDocumentIDs, err = ac.processChatAttachments(tx, c, files, user.Email, applicationID)
+		if err != nil {
+			tx.Rollback()
+			config.Logger.Error("Failed to process chat attachments",
+				zap.Error(err),
+				zap.String("applicationID", applicationID))
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"success": false,
+				"message": "Failed to process file attachments",
+				"error":   err.Error(),
+			})
+		}
+	}
+
+	// Process issue creation with chat thread and file attachments
+	issue, chatThread, err := ac.ApplicationRepo.RaiseApplicationIssueWithChatAndAttachments(
 		tx,
 		applicationID,
 		userUUID,
@@ -94,6 +139,8 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		request.AssignmentType,
 		request.AssignedToUserID,
 		request.AssignedToGroupMemberID,
+		attachmentDocumentIDs, // Pass document IDs instead of file headers
+		user.Email,
 	)
 	if err != nil {
 		tx.Rollback()
@@ -129,12 +176,13 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 		})
 	}
 
-	config.Logger.Info("Issue raised successfully with chat thread",
+	config.Logger.Info("Issue raised successfully with chat thread and attachments",
 		zap.String("applicationID", applicationID),
 		zap.String("userID", userUUID.String()),
 		zap.String("issueID", issue.ID.String()),
 		zap.String("chatThreadID", chatThread.ID.String()),
-		zap.String("assignmentType", string(request.AssignmentType)))
+		zap.String("assignmentType", string(request.AssignmentType)),
+		zap.Int("attachmentCount", len(attachmentDocumentIDs)))
 
 	response := fiber.Map{
 		"success": true,
@@ -146,4 +194,85 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	}
 
 	return c.Status(fiber.StatusCreated).JSON(response)
+}
+
+// processChatAttachments processes file attachments and returns document IDs
+func (ac *ApplicationController) processChatAttachments(
+	tx *gorm.DB,
+	c *fiber.Ctx,
+	files []*multipart.FileHeader,
+	createdBy string,
+	applicationID string,
+) ([]uuid.UUID, error) {
+
+	var documentIDs []uuid.UUID
+
+	appID, err := uuid.Parse(applicationID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid application ID: %w", err)
+	}
+
+	for _, fileHeader := range files {
+		// Create document request for chat attachment
+		documentRequest := &documents_requests.CreateDocumentRequest{
+			CategoryCode:  "CHAT_ATTACHMENT", // Make sure this category exists
+			FileName:      fileHeader.Filename,
+			CreatedBy:     createdBy,
+			ApplicationID: &appID,
+			FileType:      fileHeader.Header.Get("Content-Type"),
+		}
+
+		// Use your existing document service to create the document
+		response, err := ac.DocumentSvc.UnifiedCreateDocument(
+			tx,
+			c,
+			documentRequest,
+			nil, // No file content bytes, we'll use the multipart file
+			fileHeader,
+		)
+
+		if err != nil {
+			config.Logger.Error("Failed to create document for chat attachment",
+				zap.Error(err),
+				zap.String("filename", fileHeader.Filename))
+			// Continue with other files instead of failing the entire operation
+			continue
+		}
+
+		documentIDs = append(documentIDs, response.Document.ID)
+
+		config.Logger.Info("Chat attachment document created successfully",
+			zap.String("filename", fileHeader.Filename),
+			zap.String("documentID", response.Document.ID.String()))
+	}
+
+	if len(documentIDs) == 0 && len(files) > 0 {
+		return nil, fmt.Errorf("failed to process any of the %d file attachments", len(files))
+	}
+
+	return documentIDs, nil
+}
+
+// Helper functions for form parsing
+func getFormValue(form *multipart.Form, key string) string {
+	if values, exists := form.Value[key]; exists && len(values) > 0 {
+		return values[0]
+	}
+	return ""
+}
+
+func getFormValuePtr(form *multipart.Form, key string) *string {
+	if values, exists := form.Value[key]; exists && len(values) > 0 && values[0] != "" {
+		return &values[0]
+	}
+	return nil
+}
+
+func getUUIDPtrFromForm(form *multipart.Form, key string) *uuid.UUID {
+	if values, exists := form.Value[key]; exists && len(values) > 0 && values[0] != "" {
+		if id, err := uuid.Parse(values[0]); err == nil {
+			return &id
+		}
+	}
+	return nil
 }

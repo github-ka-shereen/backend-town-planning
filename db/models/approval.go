@@ -267,9 +267,6 @@ type ApplicationIssue struct {
 	// Chat thread reference
 	ChatThreadID *uuid.UUID `gorm:"type:uuid;index" json:"chat_thread_id"`
 
-	// Enhanced relationships
-	ChatThread *ChatThread `gorm:"foreignKey:ChatThreadID" json:"chat_thread,omitempty"`
-
 	// ========================================
 	// ISSUE DETAILS
 	// ========================================

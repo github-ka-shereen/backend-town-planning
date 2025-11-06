@@ -147,13 +147,14 @@ func main() {
 	standRepo := stands_repositories.NewStandRepository(db)
 	userRepo := users_repositories.NewUserRepository(db)
 	applicantRepo := applicants_repositories.NewApplicantRepository(db)
-	applicationRepo := applications_repositories.NewApplicationRepository(db)
 	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
 	documentRepo := document_repositories.NewDocumentRepository(db, standRepo)
 
 	// Services
 	fileStorage := utils.NewLocalFileStorage("./uploads")
 	documentService := document_services.NewDocumentService(documentRepo, fileStorage)
+
+	applicationRepo := applications_repositories.NewApplicationRepository(db, documentService)
 
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
