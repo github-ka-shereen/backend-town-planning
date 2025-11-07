@@ -67,6 +67,9 @@ type ApplicationRepository interface {
 	GetThreadParticipants(threadID string) ([]models.ChatParticipant, error)
 	RemoveMultipleParticipantsFromThread(tx *gorm.DB, threadID uuid.UUID, userIDs []uuid.UUID, removedBy string) (int, error)
 	AddMultipleParticipantsToThread(tx *gorm.DB, threadID uuid.UUID, participants []requests.ParticipantRequest, addedBy string) ([]models.ChatParticipant, error)
+	MarkIssueAsResolved(tx *gorm.DB, issueID string, resolvedByUserID uuid.UUID, resolutionComment *string) (*models.ApplicationIssue, error)
+	ReopenIssue(tx *gorm.DB, issueID string, reopenedByUserID uuid.UUID) (*models.ApplicationIssue, error)
+	GetIssueByID(issueID string) (*models.ApplicationIssue, error)
 }
 
 type applicationRepository struct {

@@ -24,3 +24,22 @@ type UnifiedParticipantRequest struct {
 	// Operation type
 	Operation string `json:"operation,omitempty"` // "add_single", "add_bulk", "remove_single", "remove_bulk"
 }
+
+type ResolveIssueRequest struct {
+	ResolutionComment *string `json:"resolution_comment" form:"resolution_comment"`
+}
+
+type ReopenIssueRequest struct {
+	ReopenReason *string `json:"reopen_reason" form:"reopen_reason"`
+}
+
+type IssueResolutionResponse struct {
+	Success bool                 `json:"success"`
+	Message string               `json:"message"`
+	Data    *IssueResolutionData `json:"data,omitempty"`
+}
+
+type IssueResolutionData struct {
+	Issue        *models.ApplicationIssue `json:"issue"`
+	ChatThreadID *uuid.UUID               `json:"chat_thread,omitempty"`
+}
