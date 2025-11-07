@@ -76,7 +76,10 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
 	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
 	applicationRoutes.Post("/applications/:id/raise-issue", applicationController.RaiseIssueController)
+	applicationRoutes.Post("/issues/:id/resolve", applicationController.ResolveIssueController)
+	applicationRoutes.Post("/issues/:id/reopen", applicationController.ReopenIssueController)
 	applicationRoutes.Post("/chat/threads/:threadId/messages", applicationController.SendMessageController)
+
 
 	// Unified Chat Participants Management (SINGLE ENDPOINT)
 	applicationRoutes.Post("/chat/threads/:threadId/participants", applicationController.UnifiedParticipantController)
