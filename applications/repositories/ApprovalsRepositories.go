@@ -10,7 +10,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 // ProcessApplicationApproval handles the approval of an application by a group member
 func (r *applicationRepository) ProcessApplicationApproval(
 	tx *gorm.DB,
@@ -61,10 +60,10 @@ func (r *applicationRepository) ProcessApplicationApproval(
 
 	assignment := application.GroupAssignments[0]
 
-	// Check if user already made a decision
+	// Check if user already made a decision - FIXED VERSION
 	var existingDecision models.MemberApprovalDecision
 	err = tx.
-		Where("assignment_id = ? AND user_id = ?", assignment.ID, userID).
+		Where("assignment_id = ? AND member_id = ?", assignment.ID, groupMember.ID). // Use member_id
 		First(&existingDecision).Error
 
 	now := time.Now()
@@ -77,7 +76,7 @@ func (r *applicationRepository) ProcessApplicationApproval(
 		decision.DecidedAt = &now
 		decision.UpdatedAt = now
 	} else if errors.Is(err, gorm.ErrRecordNotFound) {
-		// Create new decision
+		// This shouldn't happen if initial decisions were created, but handle it
 		decision = models.MemberApprovalDecision{
 			ID:                      uuid.New(),
 			AssignmentID:            assignment.ID,
@@ -379,7 +378,7 @@ func (r *applicationRepository) RaiseApplicationIssue(
 		// Verify the assigned member belongs to the same group and is active
 		var assignedMember models.ApprovalGroupMember
 		if err := tx.
-			Where("id = ? AND approval_group_id = ? AND is_active = ?", 
+			Where("id = ? AND approval_group_id = ? AND is_active = ?",
 				assignedToGroupMemberID, application.ApprovalGroup.ID, true).
 			First(&assignedMember).Error; err != nil {
 			return nil, errors.New("invalid group member assignment - member not found or inactive")

@@ -274,19 +274,27 @@ type EnhancedChatThread struct {
 	TotalCount   int                       `json:"total_count"` // Total messages count
 }
 
+type MessageSummary struct {
+    ID        uuid.UUID `json:"id"`
+    Content   string    `json:"content"`
+    Sender    *UserSummary `json:"sender"`
+    CreatedAt string    `json:"created_at"`
+}
+
 // Enhanced chat message with attachments
 type EnhancedChatMessage struct {
-	ID          uuid.UUID                `json:"id"`
-	Content     string                   `json:"content"`
-	MessageType models.ChatMessageType   `json:"message_type"`
-	Status      models.MessageStatus     `json:"status"`
-	IsEdited    bool                     `json:"is_edited"`
-	EditedAt    *string                  `json:"edited_at,omitempty"`
-	IsDeleted   bool                     `json:"is_deleted"`
-	CreatedAt   string                   `json:"created_at"`
-	Sender      *UserSummary             `json:"sender"`
-	ParentID    *uuid.UUID               `json:"parent_id,omitempty"`
-	Attachments []*ChatAttachmentSummary `json:"attachments,omitempty"`
+    ID          uuid.UUID              `json:"id"`
+    Content     string                 `json:"content"`
+    MessageType models.ChatMessageType `json:"message_type"`
+    Status      models.MessageStatus   `json:"status"`
+    IsEdited    bool                   `json:"is_edited"`
+    EditedAt    *string                `json:"edited_at,omitempty"`
+    IsDeleted   bool                   `json:"is_deleted"`
+    CreatedAt   string                 `json:"created_at"`
+    Sender      *UserSummary           `json:"sender"`
+    ParentID    *uuid.UUID             `json:"parent_id,omitempty"`
+    Parent      *MessageSummary        `json:"parent,omitempty"` // NEW: For reply threads
+    Attachments []*ChatAttachmentSummary `json:"attachments,omitempty"`
 }
 
 // Chat attachment summary

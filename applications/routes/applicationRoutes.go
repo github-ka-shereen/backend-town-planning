@@ -84,12 +84,13 @@ func ApplicationRouterInit(
 	// Get Thread Participants (Separate GET endpoint)
 	applicationRoutes.Get("/chat/threads/:threadId/participants", applicationController.GetThreadParticipantsController)
 
-	// ========================================
-	// ISSUE RESOLUTION ENDPOINTS - ADD THESE
-	// ========================================
-	applicationRoutes.Post("/issues/:id/resolve", applicationController.ResolveIssueController)
-	applicationRoutes.Post("/issues/:id/reopen", applicationController.ReopenIssueController)
-
 	// New approval workflow endpoints
 	// applicationRoutes.Post("/applications/:id/assign-group", applicationController.AssignApplicationToGroupController)
+
+	// Chat Message Features - ADD THESE ROUTES
+	applicationRoutes.Post("/chat/messages/:messageId/star", applicationController.StarMessageController)
+	applicationRoutes.Post("/chat/messages/:messageId/reply", applicationController.ReplyToMessageController)
+	applicationRoutes.Delete("/chat/messages/:messageId", applicationController.DeleteMessageController)
+	applicationRoutes.Get("/chat/messages/:messageId/stars", applicationController.GetMessageStarsController)
+	applicationRoutes.Get("/chat/messages/:messageId/thread", applicationController.GetMessageThreadController)
 }

@@ -68,6 +68,8 @@ var allModels = []interface{}{
 	&models.ChatMessage{},     // References ChatThread
 	&models.ReadReceipt{},     // References ChatMessage
 	&models.ChatAttachment{},  // References ChatMessage and Document
+	&models.MessageStar{},
+	&models.MessageReaction{},
 
 	// 10. Document Join Tables (must come after Document and related entities)
 	&models.ApplicantDocument{},

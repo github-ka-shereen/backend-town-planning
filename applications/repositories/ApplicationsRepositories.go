@@ -5,9 +5,9 @@ import (
 	"mime/multipart"
 	"strings"
 	"time"
+	"town-planning-backend/applications/requests"
 	"town-planning-backend/db/models"
 	documents_services "town-planning-backend/documents/services"
-	"town-planning-backend/applications/requests"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/google/uuid"
@@ -70,6 +70,12 @@ type ApplicationRepository interface {
 	MarkIssueAsResolved(tx *gorm.DB, issueID string, resolvedByUserID uuid.UUID, resolutionComment *string) (*models.ApplicationIssue, error)
 	ReopenIssue(tx *gorm.DB, issueID string, reopenedByUserID uuid.UUID) (*models.ApplicationIssue, error)
 	GetIssueByID(issueID string) (*models.ApplicationIssue, error)
+	DeleteMessage(tx *gorm.DB, messageID uuid.UUID, userID uuid.UUID) error
+	StarMessage(tx *gorm.DB, messageID uuid.UUID, userID uuid.UUID) (bool, error)
+	CreateReplyMessage(tx *gorm.DB, threadID string, parentMessageID uuid.UUID, content string, messageType models.ChatMessageType, senderID uuid.UUID, files []*multipart.FileHeader, applicationID *uuid.UUID, createdBy string) (*EnhancedChatMessage, error)
+	GetMessageStars(messageID uuid.UUID) ([]models.MessageStar, error)
+	GetMessageThread(messageID uuid.UUID) ([]*EnhancedChatMessage, error)
+	IsMessageStarredByUser(messageID uuid.UUID, userID uuid.UUID) (bool, error)
 }
 
 type applicationRepository struct {

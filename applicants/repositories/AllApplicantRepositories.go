@@ -21,6 +21,7 @@ type ApplicantRepository interface {
 	CreateVATRate(tx *gorm.DB, vatRate *models.VATRate) (*models.VATRate, error)
 	GetFilteredVatRates(limit, offset int, filters map[string]string) ([]models.VATRate, int64, error)
 	AssignApplicationToGroup(tx *gorm.DB, applicationID string, groupID uuid.UUID, assignedBy string, reassignReason *string, userUUID uuid.UUID) (*models.ApplicationGroupAssignment, error)
+	CreateInitialDecisions(tx *gorm.DB, assignmentID uuid.UUID, groupID uuid.UUID) error
 }
 
 type applicantRepository struct {
@@ -32,9 +33,72 @@ func NewApplicantRepository(db *gorm.DB) ApplicantRepository {
 	return &applicantRepository{DB: db}
 }
 
+// CreateInitialDecisions creates PENDING decisions for all active group members
+func (r *applicantRepository) CreateInitialDecisions(
+	tx *gorm.DB,
+	assignmentID uuid.UUID,
+	groupID uuid.UUID,
+) error {
+	config.Logger.Info("Creating initial decisions for assignment",
+		zap.String("assignmentID", assignmentID.String()),
+		zap.String("groupID", groupID.String()))
+
+	// Get all active members of the approval group
+	var members []models.ApprovalGroupMember
+	if err := tx.
+		Preload("User").
+		Where("approval_group_id = ? AND is_active = ?", groupID, true).
+		Find(&members).Error; err != nil {
+		config.Logger.Error("Failed to fetch group members for initial decisions",
+			zap.String("groupID", groupID.String()),
+			zap.Error(err))
+		return fmt.Errorf("failed to fetch group members: %w", err)
+	}
+
+	config.Logger.Info("Found active group members for initial decisions",
+		zap.String("groupID", groupID.String()),
+		zap.Int("memberCount", len(members)))
+
+	// Create a PENDING decision for each member
+	for _, member := range members {
+		decision := models.MemberApprovalDecision{
+			ID:                      uuid.New(),
+			AssignmentID:            assignmentID,
+			MemberID:                member.ID,
+			UserID:                  member.UserID,
+			Status:                  models.DecisionPending,
+			AssignedAs:              member.Role,
+			IsFinalApproverDecision: member.IsFinalApprover,
+			WasAvailable:            member.AvailabilityStatus == models.AvailabilityAvailable,
+			CreatedAt:               time.Now(),
+		}
+
+		if err := tx.Create(&decision).Error; err != nil {
+			config.Logger.Error("Failed to create initial decision for member",
+				zap.String("memberID", member.ID.String()),
+				zap.String("assignmentID", assignmentID.String()),
+				zap.Error(err))
+			// Continue with other members even if one fails
+			continue
+		}
+
+		config.Logger.Debug("Created initial decision for member",
+			zap.String("memberID", member.ID.String()),
+			zap.String("decisionID", decision.ID.String()),
+			zap.String("assignmentID", assignmentID.String()))
+	}
+
+	config.Logger.Info("Completed creating initial decisions",
+		zap.String("assignmentID", assignmentID.String()),
+		zap.String("groupID", groupID.String()),
+		zap.Int("totalMembers", len(members)))
+
+	return nil
+}
+
 // AssignApplicationToGroup assigns or reassigns an application to an approval group for review
 func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationID string, groupID uuid.UUID, assignedBy string, reassignReason *string, userUUID uuid.UUID) (*models.ApplicationGroupAssignment, error) {
-	config.Logger.Info("🔍 AssignApplicationToGroup starting", 
+	config.Logger.Info("AssignApplicationToGroup starting", 
 		zap.String("applicationID", applicationID), 
 		zap.String("groupID", groupID.String()),
 		zap.String("assignedBy", assignedBy),
@@ -44,30 +108,30 @@ func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationI
 	var application models.Application
 	var group models.ApprovalGroup
 
-	config.Logger.Info("🔍 Looking up application", zap.String("applicationID", applicationID))
+	config.Logger.Info("Looking up application", zap.String("applicationID", applicationID))
 	if err := tx.Where("id = ?", applicationID).First(&application).Error; err != nil {
-		config.Logger.Error("❌ Application not found", zap.String("applicationID", applicationID), zap.Error(err))
+		config.Logger.Error("Application not found", zap.String("applicationID", applicationID), zap.Error(err))
 		return nil, fmt.Errorf("application not found: %w", err)
 	}
-	config.Logger.Info("✅ Application found", 
+	config.Logger.Info("Application found", 
 		zap.String("applicationID", application.ID.String()),
 		zap.String("applicationStatus", string(application.Status)))
 
-	config.Logger.Info("🔍 Looking up approval group", zap.String("groupID", groupID.String()))
+	config.Logger.Info("Looking up approval group", zap.String("groupID", groupID.String()))
 	if err := tx.Where("id = ?", groupID).First(&group).Error; err != nil {
-		config.Logger.Error("❌ Approval group not found", zap.String("groupID", groupID.String()), zap.Error(err))
+		config.Logger.Error("Approval group not found", zap.String("groupID", groupID.String()), zap.Error(err))
 		return nil, fmt.Errorf("approval group not found: %w", err)
 	}
-	config.Logger.Info("✅ Approval group found", 
+	config.Logger.Info("Approval group found", 
 		zap.String("groupID", group.ID.String()),
 		zap.String("groupName", group.Name))
 
 	// Check for existing active assignment
 	var existingAssignment models.ApplicationGroupAssignment
 
-	config.Logger.Info("🔍 Checking for existing active assignments", zap.String("applicationID", applicationID))
+	config.Logger.Info("Checking for existing active assignments", zap.String("applicationID", applicationID))
 	if err := tx.Where("application_id = ? AND is_active = ?", applicationID, true).First(&existingAssignment).Error; err == nil {
-		config.Logger.Info("🔄 Found existing active assignment, processing reassignment",
+		config.Logger.Info("Found existing active assignment, processing reassignment",
 			zap.String("existingAssignmentID", existingAssignment.ID.String()),
 			zap.String("existingGroupID", existingAssignment.ApprovalGroupID.String()))
 
@@ -76,14 +140,14 @@ func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationI
 		existingAssignment.IsActive = false
 		existingAssignment.CompletedAt = &completedAt
 		
-		config.Logger.Info("🔍 Deactivating existing assignment")
+		config.Logger.Info("Deactivating existing assignment")
 		if err := tx.Save(&existingAssignment).Error; err != nil {
-			config.Logger.Error("❌ Failed to deactivate existing assignment", 
+			config.Logger.Error("Failed to deactivate existing assignment", 
 				zap.String("assignmentID", existingAssignment.ID.String()),
 				zap.Error(err))
 			return nil, fmt.Errorf("failed to deactivate existing assignment: %w", err)
 		}
-		config.Logger.Info("✅ Existing assignment deactivated")
+		config.Logger.Info("Existing assignment deactivated")
 
 		// Create a comment about the reassignment
 		comment := models.Comment{
@@ -97,31 +161,31 @@ func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationI
 			CreatedBy: assignedBy,
 		}
 		
-		config.Logger.Info("🔍 Creating reassignment comment")
+		config.Logger.Info("Creating reassignment comment")
 		if err := tx.Create(&comment).Error; err != nil {
 			// Log but don't fail the operation
-			config.Logger.Warn("⚠️ Failed to create reassignment comment", 
+			config.Logger.Warn("Failed to create reassignment comment", 
 				zap.String("commentID", comment.ID.String()),
 				zap.Error(err))
 		} else {
-			config.Logger.Info("✅ Reassignment comment created")
+			config.Logger.Info("Reassignment comment created")
 		}
 	} else {
-		config.Logger.Info("✅ No existing active assignment found (this is normal for new applications)")
+		config.Logger.Info("No existing active assignment found (this is normal for new applications)")
 	}
 
 	// Count active group members for the new group
 	var memberCount int64
-	config.Logger.Info("🔍 Counting active group members", zap.String("groupID", groupID.String()))
+	config.Logger.Info("Counting active group members", zap.String("groupID", groupID.String()))
 	if err := tx.Model(&models.ApprovalGroupMember{}).
 		Where("approval_group_id = ? AND is_active = ?", groupID, true).
 		Count(&memberCount).Error; err != nil {
-		config.Logger.Error("❌ Failed to count group members", 
+		config.Logger.Error("Failed to count group members", 
 			zap.String("groupID", groupID.String()),
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to count group members: %w", err)
 	}
-	config.Logger.Info("✅ Group member count", 
+	config.Logger.Info("Group member count", 
 		zap.String("groupID", groupID.String()),
 		zap.Int64("memberCount", memberCount))
 
@@ -144,18 +208,33 @@ func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationI
 		UsedBackupMembers:     false,
 	}
 
-	config.Logger.Info("🔍 Creating new group assignment", 
+	config.Logger.Info("Creating new group assignment", 
 		zap.String("assignmentID", assignment.ID.String()),
 		zap.String("applicationID", assignment.ApplicationID.String()),
 		zap.String("groupID", assignment.ApprovalGroupID.String()))
 	
 	if err := tx.Create(&assignment).Error; err != nil {
-		config.Logger.Error("❌ Failed to create group assignment", 
+		config.Logger.Error("Failed to create group assignment", 
 			zap.String("assignmentID", assignment.ID.String()),
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to create group assignment: %w", err)
 	}
-	config.Logger.Info("✅ New group assignment created")
+	config.Logger.Info("New group assignment created")
+
+	// ADDED: Create initial PENDING decisions for all group members
+	config.Logger.Info("Creating initial decisions for all group members")
+	if err := r.CreateInitialDecisions(tx, assignment.ID, groupID); err != nil {
+		config.Logger.Error("Failed to create initial decisions", 
+			zap.String("assignmentID", assignment.ID.String()),
+			zap.String("groupID", groupID.String()),
+			zap.Error(err))
+		// Don't fail the entire operation if decisions creation fails, but log it
+		config.Logger.Warn("Proceeding without initial decisions - some functionality may be limited")
+	} else {
+		config.Logger.Info("Initial decisions created successfully",
+			zap.String("assignmentID", assignment.ID.String()),
+			zap.String("groupID", groupID.String()))
+	}
 
 	// Update application's assigned group and status
 	updates := map[string]interface{}{
@@ -163,114 +242,26 @@ func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationI
 		"status":            models.UnderReviewApplication,
 	}
 
-	config.Logger.Info("🔍 Updating application status and assigned group",
+	config.Logger.Info("Updating application status and assigned group",
 		zap.String("applicationID", application.ID.String()),
 		zap.Any("updates", updates))
 	
 	if err := tx.Model(&application).Updates(updates).Error; err != nil {
-		config.Logger.Error("❌ Failed to update application", 
+		config.Logger.Error("Failed to update application", 
 			zap.String("applicationID", application.ID.String()),
 			zap.Any("updates", updates),
 			zap.Error(err))
 		return nil, fmt.Errorf("failed to update application: %w", err)
 	}
-	config.Logger.Info("✅ Application updated successfully")
+	config.Logger.Info("Application updated successfully")
 
-	config.Logger.Info("🎉 AssignApplicationToGroup completed successfully",
+	config.Logger.Info("AssignApplicationToGroup completed successfully",
 		zap.String("assignmentID", assignment.ID.String()),
 		zap.String("applicationID", application.ID.String()),
 		zap.String("groupID", groupID.String()))
 	
 	return &assignment, nil
 }
-
-// // AssignApplicationToGroup assigns or reassigns an application to an approval group for review
-// func (r *applicantRepository) AssignApplicationToGroup(tx *gorm.DB, applicationID string, groupID uuid.UUID, assignedBy string, reassignReason *string, userUUID uuid.UUID) (*models.ApplicationGroupAssignment, error) {
-// 	// Fetch the application and group to validate
-// 	var application models.Application
-// 	var group models.ApprovalGroup
-
-// 	if err := tx.Where("id = ?", applicationID).First(&application).Error; err != nil {
-// 		return nil, fmt.Errorf("application not found: %w", err)
-// 	}
-
-// 	if err := tx.Where("id = ?", groupID).First(&group).Error; err != nil {
-// 		return nil, fmt.Errorf("approval group not found: %w", err)
-// 	}
-
-// 	// Check for existing active assignment
-// 	var existingAssignment models.ApplicationGroupAssignment
-
-// 	if err := tx.Where("application_id = ? AND is_active = ?", applicationID, true).First(&existingAssignment).Error; err == nil {
-
-// 		completedAt := time.Now()
-// 		// Deactivate the existing assignment
-// 		existingAssignment.IsActive = false
-// 		existingAssignment.CompletedAt = &completedAt
-// 		if err := tx.Save(&existingAssignment).Error; err != nil {
-// 			return nil, fmt.Errorf("failed to deactivate existing assignment: %w", err)
-// 		}
-
-// 		// Create a comment about the reassignment
-// 		comment := models.Comment{
-// 			ID:            uuid.New(),
-// 			ApplicationID: application.ID,
-// 			CommentType:   models.CommentTypeGeneral,
-// 			Content: fmt.Sprintf("Application reassigned from group '%s' to '%s'. Reason: %s",
-// 				existingAssignment.Group.Name, group.Name,
-// 				reassignReasonOrDefault(reassignReason)),
-// 			UserID:    userUUID,
-// 			CreatedBy: assignedBy,
-// 		}
-// 		if err := tx.Create(&comment).Error; err != nil {
-// 			// Log but don't fail the operation
-// 			config.Logger.Warn("Failed to create reassignment comment", zap.Error(err))
-// 		}
-// 	}
-
-// 	// Count active group members for the new group
-// 	var memberCount int64
-// 	if err := tx.Model(&models.ApprovalGroupMember{}).
-// 		Where("approval_group_id = ? AND is_active = ?", groupID, true).
-// 		Count(&memberCount).Error; err != nil {
-// 		return nil, fmt.Errorf("failed to count group members: %w", err)
-// 	}
-
-// 	// Create the new assignment
-// 	assignment := models.ApplicationGroupAssignment{
-// 		ID:                    uuid.New(),
-// 		ApplicationID:         application.ID,
-// 		ApprovalGroupID:       groupID,
-// 		IsActive:              true,
-// 		AssignedAt:            time.Now(),
-// 		AssignedBy:            assignedBy,
-// 		TotalMembers:          int(memberCount),
-// 		AvailableMembers:      int(memberCount),
-// 		PendingCount:          int(memberCount),
-// 		ApprovedCount:         0, // Reset counters for new assignment
-// 		RejectedCount:         0,
-// 		IssuesRaised:          0,
-// 		IssuesResolved:        0,
-// 		ReadyForFinalApproval: false,
-// 		UsedBackupMembers:     false,
-// 	}
-
-// 	if err := tx.Create(&assignment).Error; err != nil {
-// 		return nil, fmt.Errorf("failed to create group assignment: %w", err)
-// 	}
-
-// 	// Update application's assigned group and status
-// 	updates := map[string]interface{}{
-// 		"assigned_group_id": groupID,
-// 		"status":            models.UnderReviewApplication,
-// 	}
-
-// 	if err := tx.Model(&application).Updates(updates).Error; err != nil {
-// 		return nil, fmt.Errorf("failed to update application: %w", err)
-// 	}
-
-// 	return &assignment, nil
-// }
 
 func reassignReasonOrDefault(reason *string) string {
 	if reason != nil && *reason != "" {

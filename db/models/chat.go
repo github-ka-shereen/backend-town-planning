@@ -39,7 +39,8 @@ const (
 	ParticipantRoleMember ParticipantRole = "MEMBER"
 )
 
-// ChatThread represents a conversation around an issue
+// Updated models without soft delete
+
 type ChatThread struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ApplicationID uuid.UUID `gorm:"type:uuid;not null;index" json:"application_id"`
@@ -63,13 +64,11 @@ type ChatThread struct {
 	Messages     []ChatMessage     `gorm:"foreignKey:ThreadID" json:"messages,omitempty"`
 
 	// Audit fields
-	CreatedAt  time.Time      `gorm:"autoCreateTime" json:"created_at"`
-	UpdatedAt  time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	ResolvedAt *time.Time     `json:"resolved_at"`
-	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+	CreatedAt  time.Time  `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt  time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
+	ResolvedAt *time.Time `json:"resolved_at"`
 }
 
-// ChatParticipant tracks who can participate in a chat
 type ChatParticipant struct {
 	ID       uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ThreadID uuid.UUID `gorm:"type:uuid;not null;index" json:"thread_id"`
@@ -78,7 +77,7 @@ type ChatParticipant struct {
 	// Participant role
 	Role      ParticipantRole `gorm:"type:varchar(20);default:'MEMBER'" json:"role"`
 	IsActive  bool            `gorm:"default:true;index" json:"is_active"`
-	CanInvite bool            `gorm:"default:false" json:"can_invite"` // Can add other participants
+	CanInvite bool            `gorm:"default:false" json:"can_invite"`
 
 	// Notification preferences
 	MuteNotifications bool `gorm:"default:false" json:"mute_notifications"`
@@ -88,15 +87,12 @@ type ChatParticipant struct {
 	User   User       `gorm:"foreignKey:UserID" json:"user"`
 
 	// Audit fields
-	AddedBy   string         `gorm:"not null" json:"added_by"`
-	AddedAt   time.Time      `gorm:"autoCreateTime" json:"added_at"`
-	RemovedAt *time.Time     `json:"removed_at"`
-	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	AddedBy   string     `gorm:"not null" json:"added_by"`
+	AddedAt   time.Time  `gorm:"autoCreateTime" json:"added_at"`
+	RemovedAt *time.Time `json:"removed_at"`
+	UpdatedAt time.Time  `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-
-// ChatMessage represents individual chat messages with proper tracking
 type ChatMessage struct {
 	ID       uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ThreadID uuid.UUID `gorm:"type:uuid;not null;index" json:"thread_id"`
@@ -118,6 +114,10 @@ type ChatMessage struct {
 	// Reply threading
 	ParentID *uuid.UUID `gorm:"type:uuid;index" json:"parent_id"`
 
+	// Starring/Reactions
+	StarredBy []User            `gorm:"many2many:message_stars;joinForeignKey:MessageID;joinReferences:UserID" json:"starred_by,omitempty"`
+	Reactions []MessageReaction `gorm:"foreignKey:MessageID" json:"reactions,omitempty"`
+
 	// Relationships
 	Thread       ChatThread       `gorm:"foreignKey:ThreadID" json:"thread"`
 	Sender       User             `gorm:"foreignKey:SenderID" json:"sender"`
@@ -130,7 +130,6 @@ type ChatMessage struct {
 	UpdatedAt time.Time `gorm:"autoUpdateTime" json:"updated_at"`
 }
 
-// ReadReceipt tracks who has read which messages
 type ReadReceipt struct {
 	ID        uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	MessageID uuid.UUID `gorm:"type:uuid;not null;index" json:"message_id"`
@@ -142,7 +141,6 @@ type ReadReceipt struct {
 	User    User        `gorm:"foreignKey:UserID" json:"user"`
 }
 
-// ChatAttachment for file sharing in chats
 type ChatAttachment struct {
 	ID         uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	MessageID  uuid.UUID `gorm:"type:uuid;not null;index" json:"message_id"`
@@ -155,7 +153,30 @@ type ChatAttachment struct {
 	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
 }
 
-// BeforeCreate hook for ChatThread
+type MessageStar struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	MessageID uuid.UUID `gorm:"type:uuid;not null;index" json:"message_id"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Message ChatMessage `gorm:"foreignKey:MessageID" json:"message"`
+	User    User        `gorm:"foreignKey:UserID" json:"user"`
+}
+
+type MessageReaction struct {
+	ID        uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
+	MessageID uuid.UUID `gorm:"type:uuid;not null;index" json:"message_id"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	Emoji     string    `gorm:"type:varchar(10);not null" json:"emoji"`
+	CreatedAt time.Time `gorm:"autoCreateTime" json:"created_at"`
+
+	// Relationships
+	Message ChatMessage `gorm:"foreignKey:MessageID" json:"message"`
+	User    User        `gorm:"foreignKey:UserID" json:"user"`
+}
+
+// BeforeCreate hooks remain the same
 func (ct *ChatThread) BeforeCreate(tx *gorm.DB) error {
 	if ct.ID == uuid.Nil {
 		ct.ID = uuid.New()
@@ -163,7 +184,6 @@ func (ct *ChatThread) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate hook for ChatParticipant
 func (cp *ChatParticipant) BeforeCreate(tx *gorm.DB) error {
 	if cp.ID == uuid.Nil {
 		cp.ID = uuid.New()
@@ -171,7 +191,6 @@ func (cp *ChatParticipant) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate hook for ChatMessage
 func (cm *ChatMessage) BeforeCreate(tx *gorm.DB) error {
 	if cm.ID == uuid.Nil {
 		cm.ID = uuid.New()
@@ -179,7 +198,6 @@ func (cm *ChatMessage) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate hook for ReadReceipt
 func (rr *ReadReceipt) BeforeCreate(tx *gorm.DB) error {
 	if rr.ID == uuid.Nil {
 		rr.ID = uuid.New()
@@ -187,10 +205,23 @@ func (rr *ReadReceipt) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// BeforeCreate hook for ChatAttachment
 func (ca *ChatAttachment) BeforeCreate(tx *gorm.DB) error {
 	if ca.ID == uuid.Nil {
 		ca.ID = uuid.New()
+	}
+	return nil
+}
+
+func (ms *MessageStar) BeforeCreate(tx *gorm.DB) error {
+	if ms.ID == uuid.Nil {
+		ms.ID = uuid.New()
+	}
+	return nil
+}
+
+func (mr *MessageReaction) BeforeCreate(tx *gorm.DB) error {
+	if mr.ID == uuid.Nil {
+		mr.ID = uuid.New()
 	}
 	return nil
 }
