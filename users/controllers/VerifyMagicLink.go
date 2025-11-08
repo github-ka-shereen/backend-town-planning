@@ -111,17 +111,18 @@ func (elc *EnhancedLoginController) VerifyMagicLink(c *fiber.Ctx) error {
 		)
 		return elc.sendErrorResponse(c, fiber.StatusInternalServerError, "Failed to create session", err)
 	}
+	// TODO: Set Secure=true and adjust SameSite for production environment
+	isProduction := false // replace with your environment check, e.g., config.IsProduction()
 
-	// Set cookies (same as ValidateOtp)
 	accessCookie := fiber.Cookie{
 		Name:     "access_token",
 		Value:    accessToken,
 		Expires:  time.Now().Add(15 * time.Minute),
 		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "None",
+		Secure:   isProduction, // secure in production
+		SameSite: "Lax",        // better CSRF protection
 		Path:     "/",
-		Domain:   "localhost",
+		Domain:   "localhost", // adjust for production domain
 	}
 
 	refreshCookie := fiber.Cookie{
@@ -129,10 +130,10 @@ func (elc *EnhancedLoginController) VerifyMagicLink(c *fiber.Ctx) error {
 		Value:    refreshToken,
 		Expires:  time.Now().Add(7 * 24 * time.Hour),
 		HTTPOnly: true,
-		Secure:   false,
-		SameSite: "None",
+		Secure:   isProduction, // secure in production
+		SameSite: "Lax",        // better CSRF protection
 		Path:     "/",
-		Domain:   "localhost",
+		Domain:   "localhost", // adjust for production domain
 	}
 
 	c.Cookie(&accessCookie)

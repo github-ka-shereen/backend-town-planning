@@ -1,11 +1,12 @@
 package controllers
 
 import (
-	indexing_repository "town-planning-backend/bleve/repositories"
-	"town-planning-backend/applications/repositories"
 	applicant_repository "town-planning-backend/applicants/repositories"
-	user_repository "town-planning-backend/users/repositories"
+	"town-planning-backend/applications/repositories"
+	indexing_repository "town-planning-backend/bleve/repositories"
 	documents_services "town-planning-backend/documents/services"
+	user_repository "town-planning-backend/users/repositories"
+	websocket "town-planning-backend/websocket"
 
 	"gorm.io/gorm"
 )
@@ -17,4 +18,5 @@ type ApplicationController struct {
 	BleveRepo       indexing_repository.BleveRepositoryInterface
 	UserRepo        user_repository.UserRepository
 	DocumentSvc     *documents_services.DocumentService
+	WsHub           *websocket.Hub // Added WebSocket hub for real-time features
 }

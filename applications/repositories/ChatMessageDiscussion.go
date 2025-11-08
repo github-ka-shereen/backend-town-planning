@@ -310,6 +310,20 @@ func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limi
 	return enhancedMessages, int(total), nil
 }
 
+// GetUnreadMessageCount returns count of unread messages for a user in a thread
+func (r *applicationRepository) GetUnreadMessageCount(threadID string, userID uuid.UUID) (int, error) {
+	var count int64
+	
+	err := r.db.Model(&models.ChatMessage{}).
+		Joins("LEFT JOIN read_receipts ON chat_messages.id = read_receipts.message_id AND read_receipts.user_id = ?", userID).
+		Where("chat_messages.thread_id = ? AND chat_messages.sender_id != ? AND chat_messages.is_deleted = ? AND read_receipts.id IS NULL", 
+			threadID, userID, false).
+		Count(&count).Error
+
+	return int(count), err
+}
+
+
 // GetChatThreadByIssueID gets a chat thread by issue ID
 func (r *applicationRepository) GetChatThreadByIssueID(issueID uuid.UUID) (*models.ChatThread, error) {
 	var thread models.ChatThread

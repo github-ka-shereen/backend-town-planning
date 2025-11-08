@@ -39,6 +39,9 @@ import (
 
 	// "town-planning-backend/internal/bootstrap"
 
+	// WebSocket
+	"town-planning-backend/websocket"
+
 	// WhatsApp
 
 	// Other imports
@@ -138,6 +141,14 @@ func main() {
 		log.Fatalf("Mailer not initialized")
 	}
 
+	// ------ WebSocket Hub Initialization for Real-time Chat ------
+	config.Logger.Info("Initializing WebSocket hub for real-time chat features...")
+	wsHub := websocket.NewHub()
+	go wsHub.Run()
+
+	// Create WebSocket handler with token validation
+	wsHandler := websocket.NewWsHandler(wsHub, tokenMaker)
+
 	// Serve static files
 	app.Static("/public", "./public")
 	app.Static("/uploads", "./uploads")
@@ -159,8 +170,12 @@ func main() {
 	// Routes
 	user_routes.InitRoutes(app, userRepo, ctx, redisClient, tokenMaker, bleveInterfaceRepo, db, baseURL, baseFrontendURL)
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
-	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService, applicantRepo)
+	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService, applicantRepo, wsHub) // Added wsHub
 	stand_routes.StandRouterInit(app, db, standRepo, bleveInterfaceRepo)
+
+	// ------ WebSocket Route for Real-time Communication ------
+	app.Get("/ws", wsHandler.HandleWebSocket)
+	config.Logger.Info("WebSocket endpoint registered at /ws")
 
 	// Bleve Routes
 	bleveController := bleveControllers.NewSearchController(bleveServiceRepo)
@@ -194,6 +209,7 @@ func main() {
 	//------ Run seeders for initial data with proper error handling and logging ------ //
 
 	// Start the application
+	config.Logger.Info("Server starting with WebSocket support", zap.String("port", port))
 	config.Logger.Fatal("Server failed", zap.String("port", port), zap.Error(app.Listen(":"+port)))
 }
 

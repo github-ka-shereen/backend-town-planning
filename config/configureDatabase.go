@@ -70,6 +70,7 @@ var allModels = []interface{}{
 	&models.ChatAttachment{},  // References ChatMessage and Document
 	&models.MessageStar{},
 	&models.MessageReaction{},
+	&models.TypingIndicator{},
 
 	// 10. Document Join Tables (must come after Document and related entities)
 	&models.ApplicantDocument{},

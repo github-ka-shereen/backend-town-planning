@@ -7,6 +7,7 @@ import (
 	indexing_repository "town-planning-backend/bleve/repositories"
 	documents_services "town-planning-backend/documents/services"
 	user_repository "town-planning-backend/users/repositories"
+	"town-planning-backend/websocket"
 
 	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
@@ -20,6 +21,7 @@ func ApplicationRouterInit(
 	userRepo user_repository.UserRepository,
 	documentService *documents_services.DocumentService,
 	applicantRepo applicants_repositories.ApplicantRepository,
+	wsHub *websocket.Hub, // Added WebSocket hub for real-time features
 ) {
 	applicationController := &controllers.ApplicationController{
 		ApplicationRepo: applicationRepository,
@@ -28,6 +30,7 @@ func ApplicationRouterInit(
 		UserRepo:        userRepo,
 		DocumentSvc:     documentService,
 		ApplicantRepo:   applicantRepo,
+		WsHub:           wsHub, // Added WebSocket hub to controller
 	}
 
 	applicationRoutes := app.Group("/api/v1")
@@ -80,6 +83,10 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/issues/:id/reopen", applicationController.ReopenIssueController)
 	applicationRoutes.Post("/chat/threads/:threadId/messages", applicationController.SendMessageController)
 
+	// Real-time Chat Features - ADDED THESE ROUTES
+	applicationRoutes.Post("/chat/threads/:threadId/typing", applicationController.HandleTypingIndicator) // Typing indicators
+	applicationRoutes.Post("/chat/threads/:threadId/read", applicationController.MarkMessagesAsRead)      // Read receipts
+	applicationRoutes.Get("/chat/threads/:threadId/unread", applicationController.GetUnreadCount)         // Unread message count
 
 	// Unified Chat Participants Management (SINGLE ENDPOINT)
 	applicationRoutes.Post("/chat/threads/:threadId/participants", applicationController.UnifiedParticipantController)

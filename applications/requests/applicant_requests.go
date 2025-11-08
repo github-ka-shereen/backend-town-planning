@@ -43,3 +43,4 @@ type IssueResolutionData struct {
 	Issue        *models.ApplicationIssue `json:"issue"`
 	ChatThreadID *uuid.UUID               `json:"chat_thread,omitempty"`
 }
+

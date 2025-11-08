@@ -76,6 +76,7 @@ type ApplicationRepository interface {
 	GetMessageStars(messageID uuid.UUID) ([]models.MessageStar, error)
 	GetMessageThread(messageID uuid.UUID) ([]*EnhancedChatMessage, error)
 	IsMessageStarredByUser(messageID uuid.UUID, userID uuid.UUID) (bool, error)
+	GetUnreadMessageCount(threadID string, userID uuid.UUID) (int, error)
 }
 
 type applicationRepository struct {

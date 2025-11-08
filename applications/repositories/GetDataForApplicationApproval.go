@@ -295,6 +295,9 @@ type EnhancedChatMessage struct {
     ParentID    *uuid.UUID             `json:"parent_id,omitempty"`
     Parent      *MessageSummary        `json:"parent,omitempty"` // NEW: For reply threads
     Attachments []*ChatAttachmentSummary `json:"attachments,omitempty"`
+	ReadCount  int  `json:"read_count,omitempty"`
+	StarCount  int  `json:"star_count,omitempty"`
+	IsStarred  bool `json:"is_starred,omitempty"` 
 }
 
 // Chat attachment summary
