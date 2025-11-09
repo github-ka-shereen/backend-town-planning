@@ -7,9 +7,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// controllers/chat_controller.go
 func (cc *ApplicationController) GetChatMessagesController(c *fiber.Ctx) error {
-	// FIXED: Use the correct parameter name that matches your route
-	threadID := c.Params("threadId") // Make sure this matches your route definition
+	threadID := c.Params("threadId")
 	if threadID == "" {
 		return c.Status(400).JSON(fiber.Map{
 			"message": "Thread ID is required",
@@ -19,47 +19,43 @@ func (cc *ApplicationController) GetChatMessagesController(c *fiber.Ctx) error {
 
 	// Get pagination parameters
 	page, _ := strconv.Atoi(c.Query("page", "1"))
-	limit, _ := strconv.Atoi(c.Query("limit", "20"))
+	limit, _ := strconv.Atoi(c.Query("limit", "50"))
 
 	if page < 1 {
 		page = 1
 	}
 	if limit < 1 || limit > 100 {
-		limit = 20
+		limit = 50
 	}
 
-	// Calculate offset
 	offset := (page - 1) * limit
 
-	// Fetch messages from repository
+	// Use repository method
 	messages, total, err := cc.ApplicationRepo.GetChatMessagesWithPreload(threadID, limit, offset)
 	if err != nil {
-		return c.Status(500).JSON(fiber.Map{
-			"message": "Failed to fetch chat messages",
-			"error":   err.Error(),
-		})
+		return c.Status(500).JSON(fiber.Map{"error": err.Error()})
 	}
 
-	// Calculate pagination info
-	totalPages := (total + limit - 1) / limit
+	// Calculate pagination
+	totalInt := int(total)
+	totalPages := (totalInt + limit - 1) / limit
 	if totalPages == 0 {
 		totalPages = 1
 	}
 
-	// Return response
 	return c.JSON(fiber.Map{
-		"message": "Chat messages retrieved successfully",
+		"success": true,
 		"data": fiber.Map{
 			"messages": messages,
 			"pagination": fiber.Map{
 				"page":       page,
 				"limit":      limit,
-				"total":      total,
+				"total":      totalInt,
 				"totalPages": totalPages,
 				"hasNext":    page < totalPages,
 				"hasPrev":    page > 1,
 			},
 		},
-		"error": nil,
+		"message": "Chat messages retrieved successfully",
 	})
 }

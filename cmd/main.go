@@ -19,6 +19,7 @@ import (
 	document_repositories "town-planning-backend/documents/repositories"
 	stands_repositories "town-planning-backend/stands/repositories"
 	users_repositories "town-planning-backend/users/repositories"
+	applications_services "town-planning-backend/applications/services"
 
 	// Routes
 
@@ -146,8 +147,7 @@ func main() {
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
 
-	// Create WebSocket handler with token validation
-	wsHandler := websocket.NewWsHandler(wsHub, tokenMaker)
+	
 
 	// Serve static files
 	app.Static("/public", "./public")
@@ -160,6 +160,7 @@ func main() {
 	applicantRepo := applicants_repositories.NewApplicantRepository(db)
 	bleveServiceRepo, bleveInterfaceRepo := bleveRepositories.NewBleveRepository(bleveIndexingService)
 	documentRepo := document_repositories.NewDocumentRepository(db, standRepo)
+	readReceiptService := applications_services.NewReadReceiptService(db)
 
 	// Services
 	fileStorage := utils.NewLocalFileStorage("./uploads")
@@ -172,6 +173,9 @@ func main() {
 	applicant_routes.ApplicantInitRoutes(app, applicantRepo, bleveInterfaceRepo, db)
 	application_routes.ApplicationRouterInit(app, db, applicationRepo, bleveInterfaceRepo, userRepo, documentService, applicantRepo, wsHub) // Added wsHub
 	stand_routes.StandRouterInit(app, db, standRepo, bleveInterfaceRepo)
+
+	// Create WebSocket handler with token validation
+	wsHandler := websocket.NewWsHandler(wsHub, tokenMaker, *readReceiptService)
 
 	// ------ WebSocket Route for Real-time Communication ------
 	app.Get("/ws", wsHandler.HandleWebSocket)

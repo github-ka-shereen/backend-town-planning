@@ -106,6 +106,49 @@ type EnhancedApplicationView struct {
 	UpdatedAt string  `json:"updated_at"`
 }
 
+// repositories/application_repository.go
+
+// ReadReceiptUser represents a user who read a message
+type ReadReceiptUser struct {
+	ID       uuid.UUID `json:"id"`
+	FullName string    `json:"fullName"`
+	Email    string    `json:"email"`
+}
+
+// FrontendChatMessage - Enhanced message structure for frontend with read receipt data
+type FrontendChatMessage struct {
+	ID               uuid.UUID                 `json:"id"`
+	Content          string                    `json:"content"`
+	MessageType      models.ChatMessageType    `json:"message_type"`
+	Status           models.MessageStatus      `json:"status"`
+	IsEdited         bool                      `json:"is_edited"`
+	EditedAt         *string                   `json:"edited_at,omitempty"`
+	IsDeleted        bool                      `json:"is_deleted"`
+	CreatedAt        string                    `json:"created_at"`
+	Sender           *models.User              `json:"sender"`
+	ParentID         *uuid.UUID                `json:"parent_id,omitempty"`
+	Parent           *models.ChatMessage       `json:"parent,omitempty"`
+	Attachments      []*models.ChatAttachment  `json:"attachments,omitempty"`
+	ReadCount        int                       `json:"read_count,omitempty"`
+	StarCount        int                       `json:"star_count,omitempty"`
+	IsStarred        bool                      `json:"is_starred,omitempty"`
+	ReadBy           []ReadReceiptUser         `json:"readBy"`           // Reusable type
+	DeliveredToCount int                       `json:"deliveredToCount"` // Calculated field
+}
+
+// EnhancedChatMessageResponse - Response wrapper for frontend
+type EnhancedChatMessageResponse struct {
+	Messages   []FrontendChatMessage `json:"messages"`
+	Pagination struct {
+		Page      int `json:"page"`
+		Limit     int `json:"limit"`
+		Total     int `json:"total"`
+		TotalPages int `json:"totalPages"`
+		HasNext   bool `json:"hasNext"`
+		HasPrev   bool `json:"hasPrev"`
+	} `json:"pagination"`
+}
+
 // Enhanced applicant summary
 type EnhancedApplicantSummary struct {
 	ID             uuid.UUID `json:"id"`
@@ -293,11 +336,19 @@ type EnhancedChatMessage struct {
     CreatedAt   string                 `json:"created_at"`
     Sender      *UserSummary           `json:"sender"`
     ParentID    *uuid.UUID             `json:"parent_id,omitempty"`
-    Parent      *MessageSummary        `json:"parent,omitempty"` // NEW: For reply threads
+    Parent      *MessageSummary        `json:"parent,omitempty"` // For reply threads
     Attachments []*ChatAttachmentSummary `json:"attachments,omitempty"`
-	ReadCount  int  `json:"read_count,omitempty"`
-	StarCount  int  `json:"star_count,omitempty"`
-	IsStarred  bool `json:"is_starred,omitempty"` 
+    ReadCount   int                    `json:"read_count,omitempty"`
+    StarCount   int                    `json:"star_count,omitempty"`
+    IsStarred   bool                   `json:"is_starred,omitempty"`
+    
+    // THESE FIELDS ARE FOR READ RECEIPTS:
+    ReadBy []struct {
+        ID       uuid.UUID `json:"id"`
+        FullName string    `json:"fullName"`
+        Email    string    `json:"email"`
+    } `json:"readBy,omitempty"`
+    DeliveredToCount int `json:"deliveredToCount,omitempty"`
 }
 
 // Chat attachment summary

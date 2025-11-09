@@ -59,7 +59,7 @@ type ApplicationRepository interface {
 	ProcessApplicationRejection(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string, comment *string, commentType models.CommentType) (*RejectionResult, error)
 	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
 	RaiseApplicationIssueWithChatAndAttachments(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID, attachmentDocumentIDs []uuid.UUID, createdBy string) (*models.ApplicationIssue, *models.ChatThread, error)
-	GetChatMessagesWithPreload(threadID string, limit, offset int) ([]*EnhancedChatMessage, int, error)
+	GetChatMessagesWithPreload(threadID string, limit, offset int) ([]FrontendChatMessage, int64, error)
 	CreateMessageWithAttachments(tx *gorm.DB, c *fiber.Ctx, threadID string, content string, messageType models.ChatMessageType, senderID uuid.UUID, files []*multipart.FileHeader, applicationID *uuid.UUID, createdBy string) (*EnhancedChatMessage, error)
 	AddParticipantToThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, role models.ParticipantRole, addedBy string) error
 	RemoveParticipantFromThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, removedBy string) error

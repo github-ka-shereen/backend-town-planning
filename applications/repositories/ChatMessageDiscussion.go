@@ -214,7 +214,9 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 }
 
 // GetChatMessagesWithPreload gets messages with all relationships preloaded
-func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limit, offset int) ([]*EnhancedChatMessage, int, error) {
+// repositories/application_repository.go
+
+func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limit, offset int) ([]FrontendChatMessage, int64, error) {
 	var messages []models.ChatMessage
 
 	// Get total count
@@ -225,15 +227,17 @@ func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limi
 		return nil, 0, err
 	}
 
-	// Get paginated messages with ALL relationships preloaded including parent
+	// Get paginated messages with ALL relationships preloaded including read receipts
 	if err := r.db.
 		Preload("Sender").
 		Preload("Sender.Role").
 		Preload("Sender.Department").
 		Preload("Attachments").
 		Preload("Attachments.Document").
-		Preload("Parent").        // Preload the parent message
-		Preload("Parent.Sender"). // Preload the parent's sender
+		Preload("Parent").
+		Preload("Parent.Sender").
+		Preload("ReadReceipts").      // NEW: Preload read receipts
+		Preload("ReadReceipts.User"). // NEW: Preload users who read
 		Where("thread_id = ? AND is_deleted = ?", threadID, false).
 		Order("created_at DESC").
 		Limit(limit).
@@ -242,87 +246,69 @@ func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limi
 		return nil, 0, err
 	}
 
-	// Convert to enhanced format - no additional DB queries needed
-	enhancedMessages := make([]*EnhancedChatMessage, len(messages))
+	// Get thread participants count for delivered status
+	var participantCount int64
+	r.db.Model(&models.ChatParticipant{}).
+		Where("thread_id = ? AND is_active = ?", threadID, true).
+		Count(&participantCount)
+
+	// Convert to enhanced format with read receipt data
+	enhancedMessages := make([]FrontendChatMessage, len(messages))
 	for i, message := range messages {
 		// Build attachments from preloaded data
-		attachments := make([]*ChatAttachmentSummary, len(message.Attachments))
-		for j, attachment := range message.Attachments {
-			// FIXED: Use direct String() method for decimal.Decimal
-			fileSizeStr := attachment.Document.FileSize.String()
+		attachments := make([]*models.ChatAttachment, len(message.Attachments))
+		for j := range message.Attachments {
+			attachments[j] = &message.Attachments[j]
+		}
 
-			attachments[j] = &ChatAttachmentSummary{
-				ID:        attachment.ID,
-				FileName:  attachment.Document.FileName,
-				FileSize:  fileSizeStr,
-				FileType:  string(attachment.Document.DocumentType),
-				MimeType:  attachment.Document.MimeType,
-				FilePath:  attachment.Document.FilePath,
-				CreatedAt: attachment.Document.CreatedAt.Format(time.RFC3339),
+		// Build read receipt data
+		readBy := make([]ReadReceiptUser, 0)
+		for _, rr := range message.ReadReceipts {
+			if rr.UserID != uuid.Nil && rr.User.ID != uuid.Nil {
+				readBy = append(readBy, ReadReceiptUser{
+					ID:       rr.UserID,
+					FullName: rr.User.FirstName + " " + rr.User.LastName,
+					Email:    rr.User.Email,
+				})
 			}
 		}
 
-		// Build parent message summary if exists
-		var parentSummary *MessageSummary
-		if message.Parent != nil && !message.Parent.IsDeleted {
-			parentSummary = &MessageSummary{
-				ID:      message.Parent.ID,
-				Content: message.Parent.Content,
-				Sender: &UserSummary{
-					ID:        message.Parent.Sender.ID,
-					FirstName: message.Parent.Sender.FirstName,
-					LastName:  message.Parent.Sender.LastName,
-					Email:     message.Parent.Sender.Email,
-				},
-				CreatedAt: message.Parent.CreatedAt.Format(time.RFC3339),
-			}
-		}
-
-		// Messages are returned in DESC order, but we want to display in ASC order
-		// So we'll reverse them in the frontend
-		enhancedMessages[len(messages)-1-i] = &EnhancedChatMessage{
-			ID:          message.ID,
-			Content:     message.Content,
-			MessageType: message.MessageType,
-			Status:      message.Status,
-			IsEdited:    message.IsEdited,
-			EditedAt:    utils.FormatTimePointer(message.EditedAt),
-			IsDeleted:   message.IsDeleted,
-			CreatedAt:   message.CreatedAt.Format(time.RFC3339),
-			Sender: &UserSummary{
-				ID:        message.Sender.ID,
-				FirstName: message.Sender.FirstName,
-				LastName:  message.Sender.LastName,
-				Email:     message.Sender.Email,
-				Department: utils.DerefString(func() *string {
-					if message.Sender.Department != nil {
-						return &message.Sender.Department.Name
-					}
-					return nil
-				}()),
-			},
-			ParentID:    message.ParentID,
-			Parent:      parentSummary, // Include the parent summary
-			Attachments: attachments,
+		enhancedMessages[i] = FrontendChatMessage{
+			ID:               message.ID,
+			Content:          message.Content,
+			MessageType:      message.MessageType,
+			Status:           message.Status,
+			IsEdited:         message.IsEdited,
+			EditedAt:         utils.FormatTimePointer(message.EditedAt),
+			IsDeleted:        message.IsDeleted,
+			CreatedAt:        message.CreatedAt.Format(time.RFC3339),
+			Sender:           &message.Sender,
+			ParentID:         message.ParentID,
+			Parent:           message.Parent,
+			Attachments:      attachments,
+			ReadCount:        message.ReadCount,
+			StarCount:        message.StarCount,
+			// IsStarred:        message.IsStarred,
+			ReadBy:           readBy,
+			DeliveredToCount: int(participantCount) - 1, // All participants except sender
 		}
 	}
 
-	return enhancedMessages, int(total), nil
+	return enhancedMessages, total, nil
 }
 
 // GetUnreadMessageCount returns count of unread messages for a user in a thread
 func (r *applicationRepository) GetUnreadMessageCount(threadID string, userID uuid.UUID) (int, error) {
 	var count int64
-	
+
 	err := r.db.Model(&models.ChatMessage{}).
 		Joins("LEFT JOIN read_receipts ON chat_messages.id = read_receipts.message_id AND read_receipts.user_id = ?", userID).
-		Where("chat_messages.thread_id = ? AND chat_messages.sender_id != ? AND chat_messages.is_deleted = ? AND read_receipts.id IS NULL", 
+		Where("chat_messages.thread_id = ? AND chat_messages.sender_id != ? AND chat_messages.is_deleted = ? AND read_receipts.id IS NULL",
 			threadID, userID, false).
 		Count(&count).Error
 
 	return int(count), err
 }
-
 
 // GetChatThreadByIssueID gets a chat thread by issue ID
 func (r *applicationRepository) GetChatThreadByIssueID(issueID uuid.UUID) (*models.ChatThread, error) {

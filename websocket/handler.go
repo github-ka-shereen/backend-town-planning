@@ -4,6 +4,7 @@ package websocket
 import (
 	"fmt"
 	"time"
+	applications_services "town-planning-backend/applications/services"
 	"town-planning-backend/config"
 	"town-planning-backend/token"
 
@@ -20,15 +21,17 @@ type AuthService interface {
 
 // WsHandler manages WebSocket requests and connections
 type WsHandler struct {
-	hub  *Hub
-	auth AuthService
+	hub                *Hub
+	auth               AuthService
+	readReceiptService applications_services.ReadReceiptService
 }
 
 // NewWsHandler creates a new WebSocket handler instance
-func NewWsHandler(hub *Hub, auth AuthService) *WsHandler {
+func NewWsHandler(hub *Hub, auth AuthService, readReceiptService applications_services.ReadReceiptService) *WsHandler {
 	return &WsHandler{
-		hub:  hub,
-		auth: auth,
+		hub:                hub,
+		auth:               auth,
+		readReceiptService: readReceiptService,
 	}
 }
 
@@ -90,12 +93,13 @@ func (h *WsHandler) HandleWebSocket(c *fiber.Ctx) error {
 	// Upgrade to WebSocket using Fiber's websocket package
 	return websocket.New(func(conn *websocket.Conn) {
 		client := &Client{
-			ID:      uuid.New(),
-			UserID:  payload.UserID,
-			Conn:    conn,
-			Hub:     h.hub,
-			Send:    make(chan WebSocketMessage, 256),
-			Threads: make(map[string]bool),
+			ID:                 uuid.New(),
+			UserID:             payload.UserID,
+			Conn:               conn,
+			Hub:                h.hub,
+			Send:               make(chan WebSocketMessage, 256),
+			Threads:            make(map[string]bool),
+			readReceiptService: h.readReceiptService, // Add this line
 		}
 
 		// Auto-subscribe client to the thread they connected with
@@ -278,6 +282,31 @@ func (c *Client) handleReadReceipt(msg WebSocketMessage) {
 		return
 	}
 
+	// Convert message IDs to string slice
+	var messageIDStrings []string
+	for _, id := range messageIDs {
+		if str, ok := id.(string); ok {
+			messageIDStrings = append(messageIDStrings, str)
+		}
+	}
+
+	// USE THE INJECTED SERVICE: Save read receipts to database
+	processedCount, err := c.readReceiptService.ProcessReadReceipts(
+		threadID,
+		c.UserID,
+		messageIDStrings,
+		true, // isRealtime
+	)
+
+	if err != nil {
+		config.Logger.Error("Failed to process read receipts via WebSocket",
+			zap.Error(err),
+			zap.String("threadID", threadID),
+			zap.String("userID", c.UserID.String()))
+		c.sendError("Failed to save read receipts: " + err.Error())
+		return
+	}
+
 	// Add user info and message IDs to the payload
 	payload["userId"] = c.UserID
 	msg.Payload = payload
@@ -286,9 +315,10 @@ func (c *Client) handleReadReceipt(msg WebSocketMessage) {
 	// Broadcast to other clients in the same thread
 	c.Hub.BroadcastToThread(threadID, msg, c.UserID)
 
-	config.Logger.Debug("Read receipt handled",
+	config.Logger.Debug("Read receipt handled and saved to database",
 		zap.String("threadId", threadID),
-		zap.Int("messageCount", len(messageIDs)),
+		zap.Int("messageCount", len(messageIDStrings)),
+		zap.Int("processedCount", processedCount),
 		zap.String("userId", c.UserID.String()))
 }
 

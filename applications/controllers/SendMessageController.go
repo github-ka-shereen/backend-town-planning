@@ -69,7 +69,6 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 			"message": "User not authenticated",
 		})
 	}
-
 	userUUID := payload.UserID
 
 	// Get user details
@@ -163,7 +162,6 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		config.Logger.Warn("Failed to update thread timestamps",
 			zap.Error(err),
 			zap.String("threadID", threadID))
-		// Don't fail the entire operation for this
 	}
 
 	// Increment unread counts for all participants except sender
@@ -171,7 +169,6 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		config.Logger.Warn("Failed to increment unread counts",
 			zap.Error(err),
 			zap.String("threadID", threadID))
-		// Don't fail the entire operation for this
 	}
 
 	// --- Commit Database Transaction ---
@@ -237,13 +234,14 @@ func (ac *ApplicationController) HandleTypingIndicator(c *fiber.Ctx) error {
 	})
 }
 
-// MarkMessagesAsRead handles read receipt requests
+// ==================== MARK MESSAGES AS READ ====================
 func (ac *ApplicationController) MarkMessagesAsRead(c *fiber.Ctx) error {
 	threadID := c.Params("threadId")
 
 	var req struct {
 		MessageIDs []string `json:"messageIds"`
 		ReadAt     string   `json:"readAt,omitempty"`
+		IsRealtime bool     `json:"isRealtime"` // Add this field
 	}
 
 	if err := c.BodyParser(&req); err != nil {
@@ -262,67 +260,119 @@ func (ac *ApplicationController) MarkMessagesAsRead(c *fiber.Ctx) error {
 		})
 	}
 
-	// Update read receipts in database
-	readAt := time.Now()
-	if req.ReadAt != "" {
-		if parsedTime, err := time.Parse(time.RFC3339, req.ReadAt); err == nil {
-			readAt = parsedTime
-		}
+	// Process read receipts
+	processedCount, err := ac.processReadReceipts(threadID, payload.UserID, req.MessageIDs, req.IsRealtime)
+	if err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+			"success": false,
+			"message": "Failed to mark messages as read",
+			"error":   err.Error(),
+		})
 	}
 
-	// Create read receipts and update message status
-	for _, msgID := range req.MessageIDs {
+	// Broadcast read receipt to other participants
+	if req.IsRealtime {
+		ac.broadcastReadReceipt(threadID, payload.UserID, req.MessageIDs)
+	}
+
+	return c.JSON(fiber.Map{
+		"success": true,
+		"message": fmt.Sprintf("%d messages marked as read", processedCount),
+		"data": fiber.Map{
+			"processedCount": processedCount,
+			"threadId":      threadID,
+		},
+	})
+}
+
+// ==================== PROCESS READ RECEIPTS ====================
+func (ac *ApplicationController) processReadReceipts(threadID string, userID uuid.UUID, messageIDs []string, isRealtime bool) (int, error) {
+	processedCount := 0
+	readAt := time.Now()
+
+	// Start transaction
+	tx := ac.DB.Begin()
+	if tx.Error != nil {
+		return 0, tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	for _, msgID := range messageIDs {
 		messageUUID, err := uuid.Parse(msgID)
 		if err != nil {
+			config.Logger.Warn("Invalid message ID for read receipt",
+				zap.String("messageID", msgID),
+				zap.String("userID", userID.String()))
 			continue
 		}
 
-		// Create read receipt
-		readReceipt := models.ReadReceipt{
-			ID:         uuid.New(),
-			MessageID:  messageUUID,
-			UserID:     payload.UserID,
-			ReadAt:     readAt,
-			IsRealtime: true,
-		}
+		// Check if read receipt already exists
+		var existingReceipt models.ReadReceipt
+		result := tx.Where("message_id = ? AND user_id = ?", messageUUID, userID).First(&existingReceipt)
+		
+		if result.Error == nil {
+			// Update existing receipt
+			if err := tx.Model(&existingReceipt).Updates(map[string]interface{}{
+				"read_at":     readAt,
+				"is_realtime": isRealtime,
+			}).Error; err != nil {
+				config.Logger.Warn("Failed to update read receipt",
+					zap.Error(err),
+					zap.String("messageID", msgID),
+					zap.String("userID", userID.String()))
+				continue
+			}
+		} else {
+			// Create new read receipt
+			readReceipt := models.ReadReceipt{
+				ID:         uuid.New(),
+				MessageID:  messageUUID,
+				UserID:     userID,
+				ReadAt:     readAt,
+				IsRealtime: isRealtime,
+			}
 
-		if err := ac.DB.Create(&readReceipt).Error; err != nil {
-			config.Logger.Warn("Failed to create read receipt",
-				zap.Error(err),
-				zap.String("messageID", msgID),
-				zap.String("userID", payload.UserID.String()))
-		}
+			if err := tx.Create(&readReceipt).Error; err != nil {
+				config.Logger.Warn("Failed to create read receipt",
+					zap.Error(err),
+					zap.String("messageID", msgID),
+					zap.String("userID", userID.String()))
+				continue
+			}
 
-		// Update message read count
-		if err := ac.DB.Model(&models.ChatMessage{}).
-			Where("id = ?", messageUUID).
-			UpdateColumn("read_count", gorm.Expr("read_count + ?", 1)).Error; err != nil {
-			config.Logger.Warn("Failed to update message read count",
-				zap.Error(err),
-				zap.String("messageID", msgID))
+			// Update message read count
+			if err := tx.Model(&models.ChatMessage{}).
+				Where("id = ?", messageUUID).
+				UpdateColumn("read_count", gorm.Expr("read_count + ?", 1)).Error; err != nil {
+				config.Logger.Warn("Failed to update message read count",
+					zap.Error(err),
+					zap.String("messageID", msgID))
+			}
 		}
+		processedCount++
 	}
 
 	// Reset unread count for this user in this thread
-	if err := ac.DB.Model(&models.ChatParticipant{}).
-		Where("thread_id = ? AND user_id = ?", threadID, payload.UserID).
+	if err := tx.Model(&models.ChatParticipant{}).
+		Where("thread_id = ? AND user_id = ?", threadID, userID).
 		Updates(map[string]interface{}{
 			"unread_count": 0,
 			"last_read_at": readAt,
 		}).Error; err != nil {
-		config.Logger.Warn("Failed to reset unread count",
-			zap.Error(err),
-			zap.String("threadID", threadID),
-			zap.String("userID", payload.UserID.String()))
+		tx.Rollback()
+		return processedCount, fmt.Errorf("failed to reset unread count: %w", err)
 	}
 
-	// Broadcast read receipt via WebSocket
-	ac.broadcastReadReceipt(threadID, payload.UserID, req.MessageIDs)
+	// Commit transaction
+	if err := tx.Commit().Error; err != nil {
+		return processedCount, fmt.Errorf("failed to commit read receipts: %w", err)
+	}
 
-	return c.JSON(fiber.Map{
-		"success": true,
-		"message": "Messages marked as read",
-	})
+	return processedCount, nil
 }
 
 // GetUnreadCount returns unread message count for a thread
@@ -361,27 +411,27 @@ func (ac *ApplicationController) GetUnreadCount(c *fiber.Ctx) error {
 
 // broadcastNewMessage broadcasts a new message to all thread participants
 func (ac *ApplicationController) broadcastNewMessage(threadID string, message applicationRepositories.EnhancedChatMessage, senderID uuid.UUID) {
-    if ac.WsHub == nil {
-        config.Logger.Warn("WebSocket hub not initialized, skipping broadcast")
-        return
-    }
+	if ac.WsHub == nil {
+		config.Logger.Warn("WebSocket hub not initialized, skipping broadcast")
+		return
+	}
 
-    // Create WebSocket message with just the message data
-    wsMessage := websocket.WebSocketMessage{
-        Type:      websocket.MessageTypeChat,
-        Payload:   message, // This should be just the EnhancedChatMessage, not wrapped
-        Timestamp: time.Now(),
-        ThreadID:  threadID,
-    }
+	// Create WebSocket message with just the message data
+	wsMessage := websocket.WebSocketMessage{
+		Type:      websocket.MessageTypeChat,
+		Payload:   message, // This should be just the EnhancedChatMessage, not wrapped
+		Timestamp: time.Now(),
+		ThreadID:  threadID,
+	}
 
-    // Broadcast to all clients subscribed to this thread (excluding sender)
-    ac.WsHub.BroadcastToThread(threadID, wsMessage, senderID)
+	// Broadcast to all clients subscribed to this thread (excluding sender)
+	ac.WsHub.BroadcastToThread(threadID, wsMessage, senderID)
 
-    config.Logger.Debug("Message broadcasted via WebSocket",
-        zap.String("threadID", threadID),
-        zap.String("messageID", message.ID.String()),
-        zap.String("senderID", senderID.String()),
-        zap.Any("wsMessage", wsMessage)) // Add this for debugging
+	config.Logger.Debug("Message broadcasted via WebSocket",
+		zap.String("threadID", threadID),
+		zap.String("messageID", message.ID.String()),
+		zap.String("senderID", senderID.String()),
+		zap.Any("wsMessage", wsMessage)) // Add this for debugging
 }
 
 // broadcastTypingIndicator broadcasts typing status to thread participants
@@ -421,7 +471,7 @@ func (ac *ApplicationController) broadcastTypingIndicator(threadID string, userI
 		zap.Bool("isTyping", isTyping))
 }
 
-// broadcastReadReceipt broadcasts read receipts to thread participants
+// ==================== BROADCAST READ RECEIPT ====================
 func (ac *ApplicationController) broadcastReadReceipt(threadID string, userID uuid.UUID, messageIDs []string) {
 	if ac.WsHub == nil {
 		return
@@ -438,6 +488,7 @@ func (ac *ApplicationController) broadcastReadReceipt(threadID string, userID uu
 	readPayload := map[string]interface{}{
 		"userId":     userID,
 		"userName":   user.FirstName + " " + user.LastName,
+		"userEmail":  user.Email,
 		"messageIds": messageIDs,
 		"readAt":     time.Now().Format(time.RFC3339),
 		"threadId":   threadID,

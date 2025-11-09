@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	applications_services "town-planning-backend/applications/services"
 	"github.com/gofiber/websocket/v2"
 	"github.com/google/uuid"
 )
@@ -28,13 +29,14 @@ type WebSocketMessage struct {
 }
 
 type Client struct {
-	ID      uuid.UUID
-	UserID  uuid.UUID
-	Conn    *websocket.Conn
-	Hub     *Hub
-	Send    chan WebSocketMessage
-	Threads map[string]bool
-	mu      sync.RWMutex
+    ID                uuid.UUID
+    UserID            uuid.UUID
+    Conn              *websocket.Conn
+    Hub               *Hub
+    Send              chan WebSocketMessage
+    Threads           map[string]bool
+    mu                sync.RWMutex
+    readReceiptService applications_services.ReadReceiptService // Add this line
 }
 
 type Hub struct {
