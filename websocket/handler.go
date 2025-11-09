@@ -246,8 +246,19 @@ func (c *Client) handleTypingIndicator(msg WebSocketMessage) {
 		return
 	}
 
-	// Add user info to the payload
-	payload["userId"] = c.UserID
+	// Fetch user details from database
+	user, err := c.readReceiptService.GetUserByID(c.UserID.String()) // You'll need to add this method or access UserRepo
+	if err != nil {
+		config.Logger.Warn("Failed to get user details for broadcasting read receipt",
+			zap.Error(err),
+			zap.String("userID", c.UserID.String()))
+	} else {
+		// Add complete user info to the payload
+		payload["userId"] = c.UserID
+		payload["userName"] = user.FirstName + " " + user.LastName
+		payload["userEmail"] = user.Email
+	}
+
 	msg.Payload = payload
 	msg.ThreadID = threadID
 
@@ -307,8 +318,19 @@ func (c *Client) handleReadReceipt(msg WebSocketMessage) {
 		return
 	}
 
-	// Add user info and message IDs to the payload
-	payload["userId"] = c.UserID
+	// Fetch user details from database
+	user, err := c.readReceiptService.GetUserByID(c.UserID.String()) // You'll need to add this method or access UserRepo
+	if err != nil {
+		config.Logger.Warn("Failed to get user details for broadcasting read receipt",
+			zap.Error(err),
+			zap.String("userID", c.UserID.String()))
+	} else {
+		// Add complete user info to the payload
+		payload["userId"] = c.UserID
+		payload["userName"] = user.FirstName + " " + user.LastName
+		payload["userEmail"] = user.Email
+	}
+
 	msg.Payload = payload
 	msg.ThreadID = threadID
 

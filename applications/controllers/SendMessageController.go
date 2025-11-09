@@ -280,7 +280,7 @@ func (ac *ApplicationController) MarkMessagesAsRead(c *fiber.Ctx) error {
 		"message": fmt.Sprintf("%d messages marked as read", processedCount),
 		"data": fiber.Map{
 			"processedCount": processedCount,
-			"threadId":      threadID,
+			"threadId":       threadID,
 		},
 	})
 }
@@ -313,7 +313,7 @@ func (ac *ApplicationController) processReadReceipts(threadID string, userID uui
 		// Check if read receipt already exists
 		var existingReceipt models.ReadReceipt
 		result := tx.Where("message_id = ? AND user_id = ?", messageUUID, userID).First(&existingReceipt)
-		
+
 		if result.Error == nil {
 			// Update existing receipt
 			if err := tx.Model(&existingReceipt).Updates(map[string]interface{}{

@@ -77,3 +77,11 @@ func (s *ReadReceiptService) ProcessReadReceipts(threadID string, userID uuid.UU
 
 	return processedCount, err
 }
+
+func (s *ReadReceiptService) GetUserByID(userID string) (*models.User, error) {
+	var user models.User
+	if err := s.db.Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
