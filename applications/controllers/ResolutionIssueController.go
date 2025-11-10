@@ -489,9 +489,9 @@ func (ac *ApplicationController) createResolutionMessage(
 	}
 
 	// Create resolution message content
-	messageContent := fmt.Sprintf("Issue resolved by %s", resolvedByEmail)
+	messageContent := fmt.Sprintf("Issue resolved by %s %s", user.FirstName, user.LastName)
 	if resolutionComment != "" {
-		messageContent = fmt.Sprintf("Issue resolved by %s: %s", resolvedByEmail, resolutionComment)
+		messageContent = fmt.Sprintf("Issue resolved by %s %s:\n%s", user.FirstName, user.LastName, resolutionComment)
 	}
 
 	// Create system message
