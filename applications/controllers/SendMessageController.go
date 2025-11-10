@@ -69,10 +69,10 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 			"message": "User not authenticated",
 		})
 	}
-	userUUID := payload.UserID
+	senderUUID := payload.UserID
 
 	// Get user details
-	user, err := ac.UserRepo.GetUserByID(userUUID.String())
+	user, err := ac.UserRepo.GetUserByID(senderUUID.String())
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
@@ -89,7 +89,7 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to begin database transaction for sending message",
 			zap.Error(tx.Error),
 			zap.String("threadID", threadID),
-			zap.String("userID", userUUID.String()))
+			zap.String("userID", senderUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "Internal server error: Could not start database transaction",
@@ -103,13 +103,13 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 			config.Logger.Error("Panic detected during message creation, rolling back transaction",
 				zap.Any("panic_reason", r),
 				zap.String("threadID", threadID),
-				zap.String("userID", userUUID.String()))
+				zap.String("userID", senderUUID.String()))
 			panic(r)
 		}
 	}()
 
 	// Verify thread exists and user is a participant
-	thread, err := ac.verifyThreadAccess(tx, threadID, userUUID)
+	thread, err := ac.ApplicationRepo.VerifyThreadAccess(tx, threadID, senderUUID)
 	if err != nil {
 		tx.Rollback()
 		return c.Status(fiber.StatusForbidden).JSON(fiber.Map{
@@ -132,7 +132,7 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		threadID,
 		content,
 		chatMessageType,
-		userUUID,
+		senderUUID,
 		files,
 		applicationID,
 		user.Email,
@@ -142,7 +142,7 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to create chat message",
 			zap.Error(err),
 			zap.String("threadID", threadID),
-			zap.String("userID", userUUID.String()))
+			zap.String("userID", senderUUID.String()))
 
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
@@ -165,7 +165,7 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 	}
 
 	// Increment unread counts for all participants except sender
-	if err := ac.incrementUnreadCounts(tx, threadID, userUUID); err != nil {
+	if err := ac.incrementUnreadCounts(tx, threadID, senderUUID); err != nil {
 		config.Logger.Warn("Failed to increment unread counts",
 			zap.Error(err),
 			zap.String("threadID", threadID))
@@ -176,7 +176,7 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 		config.Logger.Error("Failed to commit database transaction for message creation",
 			zap.Error(err),
 			zap.String("threadID", threadID),
-			zap.String("userID", userUUID.String()))
+			zap.String("userID", senderUUID.String()))
 		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 			"success": false,
 			"message": "Internal server error: Could not commit database transaction",
@@ -185,14 +185,14 @@ func (ac *ApplicationController) SendMessageController(c *fiber.Ctx) error {
 	}
 
 	// BROADCAST MESSAGE VIA WEBSOCKET FOR REAL-TIME UPDATES
-	ac.broadcastNewMessage(threadID, *enhancedMessage, userUUID)
+	ac.broadcastNewMessage(threadID, *enhancedMessage, senderUUID)
 
 	// Also send typing stop indicator
-	ac.broadcastTypingIndicator(threadID, userUUID, false)
+	ac.broadcastTypingIndicator(threadID, senderUUID, false)
 
 	config.Logger.Info("Message sent and broadcasted successfully",
 		zap.String("threadID", threadID),
-		zap.String("userID", userUUID.String()),
+		zap.String("userID", senderUUID.String()),
 		zap.String("messageID", enhancedMessage.ID.String()),
 		zap.Int("attachmentCount", len(enhancedMessage.Attachments)))
 
@@ -511,23 +511,7 @@ func (ac *ApplicationController) broadcastReadReceipt(threadID string, userID uu
 
 // ==================== HELPER METHODS ====================
 
-// verifyThreadAccess verifies the thread exists and user has access
-func (ac *ApplicationController) verifyThreadAccess(tx *gorm.DB, threadID string, userID uuid.UUID) (*models.ChatThread, error) {
-	var thread models.ChatThread
 
-	// First, verify thread exists
-	if err := tx.Where("id = ? AND is_active = ?", threadID, true).First(&thread).Error; err != nil {
-		return nil, fmt.Errorf("thread not found or inactive")
-	}
-
-	// Check if user is a participant in this thread
-	var participant models.ChatParticipant
-	if err := tx.Where("thread_id = ? AND user_id = ? AND is_active = ?", threadID, userID, true).First(&participant).Error; err != nil {
-		return nil, fmt.Errorf("user is not a participant in this thread")
-	}
-
-	return &thread, nil
-}
 
 // incrementUnreadCounts increments unread counts for all participants except sender
 func (ac *ApplicationController) incrementUnreadCounts(tx *gorm.DB, threadID string, senderID uuid.UUID) error {

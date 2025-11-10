@@ -127,6 +127,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		// Convert file size to string
 		fileSizeStr := response.Document.FileSize
 
+		// For frontend response
 		attachments = append(attachments, &ChatAttachmentSummary{
 			ID:        chatAttachment.ID,
 			FileName:  response.Document.FileName,
@@ -186,7 +187,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 
 	// Convert to enhanced format
 	enhancedMessage := &EnhancedChatMessage{
-		ID:          completeMessage.ID, // This is already uuid.UUID
+		ID:          completeMessage.ID,
 		Content:     completeMessage.Content,
 		MessageType: completeMessage.MessageType,
 		Status:      completeMessage.Status,
@@ -195,7 +196,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 		IsDeleted:   completeMessage.IsDeleted,
 		CreatedAt:   completeMessage.CreatedAt.Format(time.RFC3339),
 		Sender: &UserSummary{
-			ID:        completeMessage.Sender.ID, // This is already uuid.UUID
+			ID:        completeMessage.Sender.ID,
 			FirstName: completeMessage.Sender.FirstName,
 			LastName:  completeMessage.Sender.LastName,
 			Email:     completeMessage.Sender.Email,
@@ -206,7 +207,7 @@ func (r *applicationRepository) CreateMessageWithAttachments(
 				return nil
 			}()),
 		},
-		ParentID:    completeMessage.ParentID, // Just assign directly, no conversion needed
+		ParentID:    completeMessage.ParentID,
 		Attachments: attachments,
 	}
 
@@ -274,20 +275,20 @@ func (r *applicationRepository) GetChatMessagesWithPreload(threadID string, limi
 		}
 
 		enhancedMessages[i] = FrontendChatMessage{
-			ID:               message.ID,
-			Content:          message.Content,
-			MessageType:      message.MessageType,
-			Status:           message.Status,
-			IsEdited:         message.IsEdited,
-			EditedAt:         utils.FormatTimePointer(message.EditedAt),
-			IsDeleted:        message.IsDeleted,
-			CreatedAt:        message.CreatedAt.Format(time.RFC3339),
-			Sender:           &message.Sender,
-			ParentID:         message.ParentID,
-			Parent:           message.Parent,
-			Attachments:      attachments,
-			ReadCount:        message.ReadCount,
-			StarCount:        message.StarCount,
+			ID:          message.ID,
+			Content:     message.Content,
+			MessageType: message.MessageType,
+			Status:      message.Status,
+			IsEdited:    message.IsEdited,
+			EditedAt:    utils.FormatTimePointer(message.EditedAt),
+			IsDeleted:   message.IsDeleted,
+			CreatedAt:   message.CreatedAt.Format(time.RFC3339),
+			Sender:      &message.Sender,
+			ParentID:    message.ParentID,
+			Parent:      message.Parent,
+			Attachments: attachments,
+			ReadCount:   message.ReadCount,
+			StarCount:   message.StarCount,
 			// IsStarred:        message.IsStarred,
 			ReadBy:           readBy,
 			DeliveredToCount: int(participantCount) - 1, // All participants except sender

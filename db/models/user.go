@@ -155,7 +155,7 @@ type User struct {
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// Relationships
-	Role       Role           `gorm:"foreignKey:RoleID" json:"role,omitempty"`
+	Role       *Role          `gorm:"foreignKey:RoleID" json:"role,omitempty"`
 	Department *Department    `gorm:"foreignKey:DepartmentID" json:"department,omitempty"`
 	AuditLogs  []UserAuditLog `gorm:"foreignKey:UserID;constraint:OnDelete:CASCADE" json:"audit_logs,omitempty"`
 }

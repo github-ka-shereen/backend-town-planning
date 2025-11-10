@@ -2,6 +2,7 @@
 package repositories
 
 import (
+	"fmt"
 	"mime/multipart"
 	"strings"
 	"time"
@@ -77,6 +78,7 @@ type ApplicationRepository interface {
 	GetMessageThread(messageID uuid.UUID) ([]*EnhancedChatMessage, error)
 	IsMessageStarredByUser(messageID uuid.UUID, userID uuid.UUID) (bool, error)
 	GetUnreadMessageCount(threadID string, userID uuid.UUID) (int, error)
+	VerifyThreadAccess(tx *gorm.DB, threadID string, userID uuid.UUID) (*models.ChatThread, error)
 }
 
 type applicationRepository struct {
@@ -86,6 +88,24 @@ type applicationRepository struct {
 
 func NewApplicationRepository(db *gorm.DB, documentSvc *documents_services.DocumentService) ApplicationRepository {
 	return &applicationRepository{db: db, documentSvc: documentSvc}
+}
+
+// verifyThreadAccess verifies the thread exists and user has access
+func (ac *applicationRepository) VerifyThreadAccess(tx *gorm.DB, threadID string, userID uuid.UUID) (*models.ChatThread, error) {
+	var thread models.ChatThread
+
+	// First, verify thread exists
+	if err := tx.Where("id = ? AND is_active = ?", threadID, true).First(&thread).Error; err != nil {
+		return nil, fmt.Errorf("thread not found or inactive")
+	}
+
+	// Check if user is a participant in this thread
+	var participant models.ChatParticipant
+	if err := tx.Where("thread_id = ? AND user_id = ? AND is_active = ?", threadID, userID, true).First(&participant).Error; err != nil {
+		return nil, fmt.Errorf("user is not a participant in this thread")
+	}
+
+	return &thread, nil
 }
 
 // CreateApprovalGroup creates a new approval group with its members

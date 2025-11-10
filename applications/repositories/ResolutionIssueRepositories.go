@@ -20,7 +20,7 @@ func (r *applicationRepository) MarkIssueAsResolved(
 ) (*models.ApplicationIssue, error) {
 	var issue models.ApplicationIssue
 
-	// Fix: Remove the problematic Preload or use the correct relationship name
+	// First fetch the issue with relationships
 	if err := tx.
 		Where("id = ?", issueID).
 		First(&issue).Error; err != nil {
