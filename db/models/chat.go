@@ -82,17 +82,19 @@ type ChatParticipant struct {
 	Role      ParticipantRole `gorm:"type:varchar(20);default:'MEMBER'" json:"role"`
 	IsActive  bool            `gorm:"default:true;index" json:"is_active"`
 	CanInvite bool            `gorm:"default:false" json:"can_invite"`
+	CanRemove bool            `gorm:"default:false" json:"can_remove"` // Can remove other participants
+	CanManage bool            `gorm:"default:false" json:"can_manage"` // Can change roles/permissions
 
 	// Notification preferences
 	MuteNotifications bool `gorm:"default:false" json:"mute_notifications"`
 
 	// Real-time status - ADDED FOR WEBSOCKET FEATURES
-	IsOnline      bool       `gorm:"default:false" json:"is_online"`                             // Track online status
-	LastSeenAt    *time.Time `gorm:"index" json:"last_seen_at"`                                  // Last seen timestamp
-	TypingUntil   *time.Time `json:"typing_until"`                                               // Track typing status expiration
-	UnreadCount   int        `gorm:"default:0" json:"unread_count"`                              // Per-user unread count
-	LastReadAt    *time.Time `json:"last_read_at"`                                               // Last read timestamp for this user
-	Subscribed    bool       `gorm:"default:true" json:"subscribed"`                             // WebSocket subscription status
+	IsOnline    bool       `gorm:"default:false" json:"is_online"` // Track online status
+	LastSeenAt  *time.Time `gorm:"index" json:"last_seen_at"`      // Last seen timestamp
+	TypingUntil *time.Time `json:"typing_until"`                   // Track typing status expiration
+	UnreadCount int        `gorm:"default:0" json:"unread_count"`  // Per-user unread count
+	LastReadAt  *time.Time `json:"last_read_at"`                   // Last read timestamp for this user
+	Subscribed  bool       `gorm:"default:true" json:"subscribed"` // WebSocket subscription status
 
 	// Relationships
 	Thread ChatThread `gorm:"foreignKey:ThreadID" json:"thread"`
@@ -127,7 +129,7 @@ type ChatMessage struct {
 	ParentID *uuid.UUID `gorm:"type:uuid;index" json:"parent_id"`
 
 	// Real-time delivery tracking - ENHANCED FOR WEBSOCKET FEATURES
-	DeliveredAt *time.Time `json:"delivered_at"` // When message was delivered to recipients
+	DeliveredAt *time.Time `json:"delivered_at"`                // When message was delivered to recipients
 	ReadCount   int        `gorm:"default:0" json:"read_count"` // Cache read count for performance
 	StarCount   int        `gorm:"default:0" json:"star_count"` // Cache star count for performance
 
@@ -154,10 +156,10 @@ type ReadReceipt struct {
 	ReadAt    time.Time `gorm:"not null" json:"read_at"`
 
 	// Delivery context - ADDED FOR REAL-TIME TRACKING
-	DeviceID    *string `gorm:"type:varchar(100)" json:"device_id"`     // Which device read the message
-	IPAddress   *string `gorm:"type:varchar(45)" json:"ip_address"`     // IP address for audit
-	UserAgent   *string `gorm:"type:text" json:"user_agent"`            // User agent string
-	IsRealtime  bool    `gorm:"default:true" json:"is_realtime"`        // Whether read via WebSocket
+	DeviceID   *string `gorm:"type:varchar(100)" json:"device_id"` // Which device read the message
+	IPAddress  *string `gorm:"type:varchar(45)" json:"ip_address"` // IP address for audit
+	UserAgent  *string `gorm:"type:text" json:"user_agent"`        // User agent string
+	IsRealtime bool    `gorm:"default:true" json:"is_realtime"`    // Whether read via WebSocket
 
 	// Relationships
 	Message ChatMessage `gorm:"foreignKey:MessageID" json:"message"`

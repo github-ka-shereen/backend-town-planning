@@ -3,10 +3,11 @@ package repositories
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
+	"town-planning-backend/applications/requests"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
-	"town-planning-backend/applications/requests"
 
 	"github.com/google/uuid"
 	"go.uber.org/zap"
@@ -477,127 +478,58 @@ func (r *applicationRepository) getSpecificUserParticipants(tx *gorm.DB, raisedB
 
 // repositories/chat_repository.go
 
-// AddParticipantToThread adds a user to a chat thread
-func (r *applicationRepository) AddParticipantToThread(
+func (repo *applicationRepository) AddParticipantToThread(
 	tx *gorm.DB,
 	threadID uuid.UUID,
 	userID uuid.UUID,
 	role models.ParticipantRole,
 	addedBy string,
+	canInvite bool,
+	canRemove bool,
+	canManage bool,
 ) error {
 
-	// Check if participant already exists
-	var existingParticipant models.ChatParticipant
-	err := tx.Where("thread_id = ? AND user_id = ?", threadID, userID).First(&existingParticipant).Error
+	// Check if already a participant
+	var existing models.ChatParticipant
+	err := tx.Where("thread_id = ? AND user_id = ?", threadID, userID).First(&existing).Error
 
 	if err == nil {
-		// Participant exists, reactivate if inactive
-		if !existingParticipant.IsActive {
-			existingParticipant.IsActive = true
-			existingParticipant.RemovedAt = nil
-			existingParticipant.Role = role
-			existingParticipant.UpdatedAt = time.Now()
-			return tx.Save(&existingParticipant).Error
+		// Reactivate with updated permissions
+		if !existing.IsActive {
+			return tx.Model(&existing).Updates(map[string]interface{}{
+				"is_active":  true,
+				"role":       role,
+				"can_invite": canInvite,
+				"can_remove": canRemove,
+				"can_manage": canManage,
+				"removed_at": nil,
+				"updated_at": time.Now(),
+			}).Error
 		}
-		return fmt.Errorf("user is already a participant in this thread")
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return fmt.Errorf("failed to check existing participant: %w", err)
+		return fmt.Errorf("user is already an active participant")
 	}
 
-	// Create new participant
+	// Create new participant with granular permissions
 	participant := models.ChatParticipant{
-		ID:        uuid.New(),
-		ThreadID:  threadID,
-		UserID:    userID,
-		Role:      role,
-		IsActive:  true,
-		CanInvite: role == models.ParticipantRoleOwner || role == models.ParticipantRoleAdmin,
-		AddedBy:   addedBy,
-		AddedAt:   time.Now(),
+		ID:                uuid.New(),
+		ThreadID:          threadID,
+		UserID:            userID,
+		Role:              role,
+		IsActive:          true,
+		CanInvite:         canInvite,
+		CanRemove:         canRemove,
+		CanManage:         canManage,
+		MuteNotifications: false,
+		AddedBy:           addedBy,
+		AddedAt:           time.Now(),
+		UpdatedAt:         time.Now(),
 	}
 
-	if err := tx.Create(&participant).Error; err != nil {
-		return fmt.Errorf("failed to create participant: %w", err)
-	}
-
-	// Add system message about new participant
-	systemMessage := models.ChatMessage{
-		ID:          uuid.New(),
-		ThreadID:    threadID,
-		SenderID:    userID, // System user or the added user?
-		Content:     "User added to the conversation",
-		MessageType: models.MessageTypeSystem,
-		Status:      models.MessageStatusSent,
-	}
-
-	if err := tx.Create(&systemMessage).Error; err != nil {
-		config.Logger.Warn("Failed to create system message for new participant",
-			zap.Error(err),
-			zap.String("threadID", threadID.String()))
-		// Don't fail the entire operation for this
-	}
-
-	config.Logger.Info("Participant added to thread successfully",
-		zap.String("threadID", threadID.String()),
-		zap.String("userID", userID.String()),
-		zap.String("role", string(role)))
-
-	return nil
+	return tx.Create(&participant).Error
 }
 
 // RemoveParticipantFromThread removes a user from a chat thread (soft delete)
-func (r *applicationRepository) RemoveParticipantFromThread(
-	tx *gorm.DB,
-	threadID uuid.UUID,
-	userID uuid.UUID,
-	removedBy string,
-) error {
 
-	var participant models.ChatParticipant
-	if err := tx.Where("thread_id = ? AND user_id = ? AND is_active = ?",
-		threadID, userID, true).First(&participant).Error; err != nil {
-		return fmt.Errorf("participant not found or already removed: %w", err)
-	}
-
-	// Don't allow removing the thread owner
-	if participant.Role == models.ParticipantRoleOwner {
-		return fmt.Errorf("cannot remove thread owner")
-	}
-
-	// Soft delete the participant
-	participant.IsActive = false
-	participant.RemovedAt = &time.Time{}
-	*participant.RemovedAt = time.Now()
-	participant.UpdatedAt = time.Now()
-
-	if err := tx.Save(&participant).Error; err != nil {
-		return fmt.Errorf("failed to remove participant: %w", err)
-	}
-
-	// Add system message about participant removal
-	systemMessage := models.ChatMessage{
-		ID:          uuid.New(),
-		ThreadID:    threadID,
-		SenderID:    userID, // System user or the remover?
-		Content:     "User removed from the conversation",
-		MessageType: models.MessageTypeSystem,
-		Status:      models.MessageStatusSent,
-	}
-
-	if err := tx.Create(&systemMessage).Error; err != nil {
-		config.Logger.Warn("Failed to create system message for removed participant",
-			zap.Error(err),
-			zap.String("threadID", threadID.String()))
-		// Don't fail the entire operation for this
-	}
-
-	config.Logger.Info("Participant removed from thread successfully",
-		zap.String("threadID", threadID.String()),
-		zap.String("userID", userID.String()),
-		zap.String("removedBy", removedBy))
-
-	return nil
-}
 
 // GetThreadParticipants gets all active participants for a thread
 func (r *applicationRepository) GetThreadParticipants(threadID string) ([]models.ChatParticipant, error) {
@@ -619,46 +551,57 @@ func (r *applicationRepository) GetThreadParticipants(threadID string) ([]models
 }
 
 // CanUserManageParticipants checks if a user can add/remove participants
-func (r *applicationRepository) CanUserManageParticipants(threadID string, userID uuid.UUID) (bool, error) {
-	var participant models.ChatParticipant
-
-	err := r.db.
-		Where("thread_id = ? AND user_id = ? AND is_active = ?", threadID, userID, true).
-		First(&participant).Error
-
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return false, nil
-		}
-		return false, fmt.Errorf("failed to check participant permissions: %w", err)
+func (repo *applicationRepository) CanUserManageParticipants(threadID string, userID uuid.UUID, action string) (bool, error) {
+	var thread models.ChatThread
+	if err := repo.db.Where("id = ?", threadID).First(&thread).Error; err != nil {
+		return false, err
 	}
 
-	// Only owners and admins can manage participants
-	return participant.Role == models.ParticipantRoleOwner ||
-		participant.Role == models.ParticipantRoleAdmin, nil
+	// Thread creator has full permissions
+	if userID == thread.CreatedByUserID {
+		return true, nil
+	}
+
+	// Check participant permissions
+	var participant models.ChatParticipant
+	err := repo.db.Where("thread_id = ? AND user_id = ? AND is_active = ?", threadID, userID, true).First(&participant).Error
+	if err != nil {
+		return false, nil // Not an active participant
+	}
+
+	switch action {
+	case "add":
+		return participant.CanInvite, nil
+	case "remove":
+		return participant.CanRemove, nil
+	case "manage": // For changing roles/permissions
+		return participant.CanManage, nil
+	case "any": // For general access check
+		return participant.CanInvite || participant.CanRemove || participant.CanManage, nil
+	default:
+		return false, nil
+	}
 }
 
-// repositories/chat_repository.go
-
-// AddMultipleParticipantsToThread adds multiple users to a chat thread
+// AddMultipleParticipantsToThread - REMOVE message creation from here
 func (r *applicationRepository) AddMultipleParticipantsToThread(
 	tx *gorm.DB,
 	threadID uuid.UUID,
 	participants []requests.ParticipantRequest,
-	addedBy string,
+	addedBy *models.User,
 ) ([]models.ChatParticipant, error) {
 
 	var createdParticipants []models.ChatParticipant
 	var errors []string
 
 	for _, participantReq := range participants {
-		// Check if participant already exists
+		// Check if participant already exists (including removed ones)
 		var existingParticipant models.ChatParticipant
 		err := tx.Where("thread_id = ? AND user_id = ?", threadID, participantReq.UserID).First(&existingParticipant).Error
 
 		if err == nil {
-			// Participant exists, reactivate if inactive
-			if !existingParticipant.IsActive {
+			// Participant exists, reactivate if removed/inactive
+			if existingParticipant.RemovedAt != nil || !existingParticipant.IsActive {
 				existingParticipant.IsActive = true
 				existingParticipant.RemovedAt = nil
 				existingParticipant.Role = participantReq.Role
@@ -689,7 +632,7 @@ func (r *applicationRepository) AddMultipleParticipantsToThread(
 				Role:      participantReq.Role,
 				IsActive:  true,
 				CanInvite: participantReq.Role == models.ParticipantRoleOwner || participantReq.Role == models.ParticipantRoleAdmin,
-				AddedBy:   addedBy,
+				AddedBy:   addedBy.ID.String(),
 				AddedAt:   time.Now(),
 			}
 
@@ -712,25 +655,6 @@ func (r *applicationRepository) AddMultipleParticipantsToThread(
 		}
 	}
 
-	// Add system message about multiple participants added
-	if len(createdParticipants) > 0 {
-		systemMessage := models.ChatMessage{
-			ID:          uuid.New(),
-			ThreadID:    threadID,
-			SenderID:    createdParticipants[0].UserID, // Use first added user or system user
-			Content:     fmt.Sprintf("%d users added to the conversation", len(createdParticipants)),
-			MessageType: models.MessageTypeSystem,
-			Status:      models.MessageStatusSent,
-		}
-
-		if err := tx.Create(&systemMessage).Error; err != nil {
-			config.Logger.Warn("Failed to create system message for multiple participants",
-				zap.Error(err),
-				zap.String("threadID", threadID.String()))
-			// Don't fail the entire operation for this
-		}
-	}
-
 	if len(errors) > 0 {
 		return createdParticipants, fmt.Errorf("some participants failed to add: %v", errors)
 	}
@@ -743,16 +667,59 @@ func (r *applicationRepository) AddMultipleParticipantsToThread(
 	return createdParticipants, nil
 }
 
-// RemoveMultipleParticipantsFromThread removes multiple users from a chat thread
+// RemoveParticipantFromThread 
+func (r *applicationRepository) RemoveParticipantFromThread(
+	tx *gorm.DB,
+	threadID uuid.UUID,
+	userID uuid.UUID,
+	removedBy *models.User,
+) error {
+
+	var participant models.ChatParticipant
+	if err := tx.Where("thread_id = ? AND user_id = ? AND is_active = ?",
+		threadID, userID, true).First(&participant).Error; err != nil {
+		return fmt.Errorf("participant not found or already removed: %w", err)
+	}
+
+	// Don't allow removing the thread owner
+	if participant.Role == models.ParticipantRoleOwner {
+		return fmt.Errorf("cannot remove thread owner")
+	}
+
+	// Soft delete the participant
+	participant.IsActive = false
+	participant.RemovedAt = &time.Time{}
+	*participant.RemovedAt = time.Now()
+	participant.UpdatedAt = time.Now()
+
+	if err := tx.Save(&participant).Error; err != nil {
+		return fmt.Errorf("failed to remove participant: %w", err)
+	}
+
+	config.Logger.Info("Participant removed from thread successfully",
+		zap.String("threadID", threadID.String()),
+		zap.String("userID", userID.String()),
+		zap.String("removedBy", removedBy.ID.String()))
+
+	return nil
+}
+
+// RemoveMultipleParticipantsFromThread - REMOVE message creation from here
 func (r *applicationRepository) RemoveMultipleParticipantsFromThread(
 	tx *gorm.DB,
 	threadID uuid.UUID,
 	userIDs []uuid.UUID,
-	removedBy string,
-) (int, error) {
+	userRemoving *models.User,
+) (int, error) { // Remove the message return
 
 	var errors []string
 	successCount := 0
+
+	// Get thread info to protect the creator
+	var thread models.ChatThread
+	if err := tx.Where("id = ?", threadID).First(&thread).Error; err != nil {
+		return 0, fmt.Errorf("failed to get thread details: %w", err)
+	}
 
 	for _, userID := range userIDs {
 		var participant models.ChatParticipant
@@ -793,32 +760,42 @@ func (r *applicationRepository) RemoveMultipleParticipantsFromThread(
 		successCount++
 	}
 
-	// Add system message about mass participant removal
-	if successCount > 0 {
-		systemMessage := models.ChatMessage{
-			ID:          uuid.New(),
-			ThreadID:    threadID,
-			SenderID:    userIDs[0], // Use first removed user or system user
-			Content:     fmt.Sprintf("%d users removed from conversation", successCount),
-			MessageType: models.MessageTypeSystem,
-			Status:      models.MessageStatusSent,
-		}
-
-		if err := tx.Create(&systemMessage).Error; err != nil {
-			config.Logger.Warn("Failed to create system message for mass removal",
-				zap.Error(err),
-				zap.String("threadID", threadID.String()))
-		}
-	}
-
 	if len(errors) > 0 {
-		return successCount, fmt.Errorf("some participants failed to remove: %v", errors)
+		return successCount, fmt.Errorf("some participants failed to remove: %v", strings.Join(errors, "; "))
 	}
 
 	config.Logger.Info("Multiple participants removed successfully",
 		zap.String("threadID", threadID.String()),
+		zap.String("removedBy", userRemoving.ID.String()),
 		zap.Int("successful", successCount),
 		zap.Int("errors", len(errors)))
 
 	return successCount, nil
+}
+
+func (r *applicationRepository) GetUserByID(userID string) (*models.User, error) {
+	var user models.User
+	if err := r.db.Where("id = ?", userID).First(&user).Error; err != nil {
+		return nil, err
+	}
+	return &user, nil
+}
+
+// incrementUnreadCounts increments unread counts for all participants except the specified user
+func (r *applicationRepository) incrementUnreadCounts(tx *gorm.DB, threadID string, excludeUserID uuid.UUID) error {
+	// Increment participant unread counts
+	if err := tx.Model(&models.ChatParticipant{}).
+		Where("thread_id = ? AND user_id != ? AND is_active = ?", threadID, excludeUserID, true).
+		UpdateColumn("unread_count", gorm.Expr("unread_count + ?", 1)).Error; err != nil {
+		return fmt.Errorf("failed to increment participant unread counts: %w", err)
+	}
+
+	// Increment thread unread count
+	if err := tx.Model(&models.ChatThread{}).
+		Where("id = ?", threadID).
+		UpdateColumn("unread_count", gorm.Expr("unread_count + ?", 1)).Error; err != nil {
+		return fmt.Errorf("failed to increment thread unread count: %w", err)
+	}
+
+	return nil
 }

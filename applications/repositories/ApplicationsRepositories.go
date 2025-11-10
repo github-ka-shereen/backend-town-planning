@@ -55,19 +55,16 @@ type ApplicationRepository interface {
 	GetFilteredApprovalGroups(limit, offset int, filters map[string]string) ([]models.ApprovalGroup, int64, error)
 
 	// Approval workflow methods
-	GetEnhancedApplicationApprovalData(applicationID string) (*ApplicationApprovalData, error)
+	GetEnhancedApplicationApprovalData(applicationID string, currentUserID uuid.UUID) (*ApplicationApprovalData, error)
 	ProcessApplicationApproval(tx *gorm.DB, applicationID string, userID uuid.UUID, comment *string, commentType models.CommentType) (*ApprovalResult, error)
 	ProcessApplicationRejection(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string, comment *string, commentType models.CommentType) (*RejectionResult, error)
 	RaiseApplicationIssue(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID) (*models.ApplicationIssue, error)
 	RaiseApplicationIssueWithChatAndAttachments(tx *gorm.DB, applicationID string, userID uuid.UUID, title string, description string, priority string, category *string, assignmentType models.IssueAssignmentType, assignedToUserID *uuid.UUID, assignedToGroupMemberID *uuid.UUID, attachmentDocumentIDs []uuid.UUID, createdBy string) (*models.ApplicationIssue, *models.ChatThread, error)
 	GetChatMessagesWithPreload(threadID string, limit, offset int) ([]FrontendChatMessage, int64, error)
 	CreateMessageWithAttachments(tx *gorm.DB, c *fiber.Ctx, threadID string, content string, messageType models.ChatMessageType, senderID uuid.UUID, files []*multipart.FileHeader, applicationID *uuid.UUID, createdBy string) (*EnhancedChatMessage, error)
-	AddParticipantToThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, role models.ParticipantRole, addedBy string) error
-	RemoveParticipantFromThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, removedBy string) error
-	CanUserManageParticipants(threadID string, userID uuid.UUID) (bool, error)
+	AddParticipantToThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, role models.ParticipantRole, addedBy string, canInvite bool, canRemove bool, canManage bool) error
+	CanUserManageParticipants(threadID string, userID uuid.UUID, action string) (bool, error)
 	GetThreadParticipants(threadID string) ([]models.ChatParticipant, error)
-	RemoveMultipleParticipantsFromThread(tx *gorm.DB, threadID uuid.UUID, userIDs []uuid.UUID, removedBy string) (int, error)
-	AddMultipleParticipantsToThread(tx *gorm.DB, threadID uuid.UUID, participants []requests.ParticipantRequest, addedBy string) ([]models.ChatParticipant, error)
 	MarkIssueAsResolved(tx *gorm.DB, issueID string, resolvedByUserID uuid.UUID, resolutionComment *string) (*models.ApplicationIssue, error)
 	ReopenIssue(tx *gorm.DB, issueID string, reopenedByUserID uuid.UUID) (*models.ApplicationIssue, error)
 	GetIssueByID(issueID string) (*models.ApplicationIssue, error)
@@ -79,6 +76,9 @@ type ApplicationRepository interface {
 	IsMessageStarredByUser(messageID uuid.UUID, userID uuid.UUID) (bool, error)
 	GetUnreadMessageCount(threadID string, userID uuid.UUID) (int, error)
 	VerifyThreadAccess(tx *gorm.DB, threadID string, userID uuid.UUID) (*models.ChatThread, error)
+	AddMultipleParticipantsToThread(tx *gorm.DB, threadID uuid.UUID, participants []requests.ParticipantRequest, addedBy *models.User) ([]models.ChatParticipant, error)
+	RemoveParticipantFromThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, removedBy *models.User) error
+	RemoveMultipleParticipantsFromThread(tx *gorm.DB, threadID uuid.UUID, userIDs []uuid.UUID, userRemoving *models.User) (int, error)
 }
 
 type applicationRepository struct {

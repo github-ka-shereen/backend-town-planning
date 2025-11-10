@@ -1,14 +1,13 @@
 // repositories/application_repository.go
-
 package repositories
 
 import (
+	"fmt"
 	"time"
 	"town-planning-backend/db/models"
 	"town-planning-backend/utils"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
 type WorkflowStatus struct {
@@ -39,7 +38,7 @@ type ApplicationApprovalData struct {
 	CanTakeAction    bool                     `json:"can_take_action"`
 	UnresolvedIssues int                      `json:"unresolved_issues"`
 	Workflow         *WorkflowStatus          `json:"workflow"`
-	ChatThreads      []*EnhancedChatThread    `json:"chat_threads,omitempty"`
+	ChatThreadIDs    []uuid.UUID              `json:"chat_thread_ids,omitempty"` // Only IDs initially
 }
 
 // EnhancedApplicationView includes all fields needed by frontend
@@ -373,9 +372,9 @@ type UserSummary struct {
 	RoleName   string    `json:"role_name,omitempty"`
 }
 
-// repositories/application_repository.go (continued)
+// repositories/application_repository.go
 
-func (r *applicationRepository) GetEnhancedApplicationApprovalData(applicationID string) (*ApplicationApprovalData, error) {
+func (r *applicationRepository) GetEnhancedApplicationApprovalData(applicationID string, currentUserID uuid.UUID) (*ApplicationApprovalData, error) {
 	var application models.Application
 
 	// Step 1: Get application with all necessary preloads
@@ -422,45 +421,58 @@ func (r *applicationRepository) GetEnhancedApplicationApprovalData(applicationID
 		}
 	}
 
-	// Step 3: Load chat threads with last 10 messages and attachments
-	var chatThreads []models.ChatThread
-	if err := r.db.
-		Preload("Participants.User").
-		Preload("Participants.User.Role").
-		Preload("Participants.User.Department").
-		Preload("Messages", func(db *gorm.DB) *gorm.DB {
-			return db.
-				Preload("Sender").
-				Preload("Sender.Role").
-				Preload("Sender.Department").
-				Preload("Attachments.Document").
-				Order("created_at DESC").
-				Limit(10) // Last 10 messages initially
-		}).
-		Where("application_id = ? AND is_active = ?", applicationID, true).
-		Find(&chatThreads).Error; err != nil {
+	// Step 3: Get accessible issues - EXCLUDE REMOVED PARTICIPANTS
+	var accessibleIssues []models.ApplicationIssue
+
+	// First, get all threads where user is currently a participant (removed_at IS NULL)
+	var userThreadIDs []uuid.UUID
+	if err := r.db.Model(&models.ChatParticipant{}).
+		Select("chat_threads.id").
+		Joins("JOIN chat_threads ON chat_threads.id = chat_participants.thread_id").
+		Where("chat_threads.application_id = ?", applicationID).
+		Where("chat_participants.user_id = ?", currentUserID).
+		Where("chat_participants.removed_at IS NULL"). // EXCLUDE REMOVED PARTICIPANTS
+		Pluck("chat_threads.id", &userThreadIDs).Error; err != nil {
 		return nil, err
 	}
 
-	// Step 4: Get total message count for each thread (for pagination)
-	threadMessageCounts := make(map[uuid.UUID]int)
-	for _, thread := range chatThreads {
-		var count int64
-		if err := r.db.Model(&models.ChatMessage{}).
-			Where("thread_id = ? AND is_deleted = ?", thread.ID, false).
-			Count(&count).Error; err == nil {
-			threadMessageCounts[thread.ID] = int(count)
+	fmt.Printf("DEBUG: User thread IDs (excluding removed participants): %v\n", userThreadIDs)
+
+	// If user has threads, get issues associated with those threads
+	if len(userThreadIDs) > 0 {
+		if err := r.db.
+			Preload("RaisedByUser").
+			Preload("RaisedByUser.Role").
+			Preload("RaisedByUser.Department").
+			Preload("AssignedToUser").
+			Preload("AssignedToUser.Role").
+			Preload("AssignedToUser.Department").
+			Where("application_id = ?", applicationID).
+			Where("chat_thread_id IN (?)", userThreadIDs).
+			Find(&accessibleIssues).Error; err != nil {
+			return nil, err
 		}
 	}
 
-	// Step 5: Build the enhanced response
+	fmt.Printf("DEBUG: Found %d accessible issues\n", len(accessibleIssues))
+	for _, issue := range accessibleIssues {
+		fmt.Printf("DEBUG: Issue: %s - %s (Resolved: %t)\n", issue.ID, issue.Title, issue.IsResolved)
+	}
+
+	// Step 4: Accessible thread IDs are the same as userThreadIDs (excluding removed participants)
+	accessibleThreadIDs := userThreadIDs
+	fmt.Printf("DEBUG: Accessible thread IDs (excluding removed participants): %v\n", accessibleThreadIDs)
+
+	// Replace the application's issues with only accessible ones
+	application.Issues = accessibleIssues
+
 	response := &ApplicationApprovalData{
-		Application:      r.buildEnhancedApplicationView(&application, groupMembers, threadMessageCounts),
+		Application:      r.buildEnhancedApplicationView(&application, groupMembers, nil),
 		ApprovalProgress: r.calculateEnhancedApprovalProgress(&application, groupMembers),
 		UnresolvedIssues: r.countUnresolvedIssues(application.Issues),
 		CanTakeAction:    r.canTakeAction(&application),
 		Workflow:         r.getEnhancedWorkflowStatus(&application, groupMembers),
-		ChatThreads:      r.buildEnhancedChatThreads(chatThreads, threadMessageCounts),
+		ChatThreadIDs:    accessibleThreadIDs,
 	}
 
 	return response, nil

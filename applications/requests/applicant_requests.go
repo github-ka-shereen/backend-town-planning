@@ -7,22 +7,27 @@ import (
 )
 
 // Request types
-type ParticipantRequest struct {
-	UserID uuid.UUID              `json:"user_id"`
-	Role   models.ParticipantRole `json:"role,omitempty"`
+type UnifiedParticipantRequest struct {
+    Operation    string                 `json:"operation"`
+    UserID       uuid.UUID              `json:"user_id,omitempty"`
+    UserIDs      []uuid.UUID            `json:"user_ids,omitempty"`
+    Participants []ParticipantRequest   `json:"participants,omitempty"`
+    Role         models.ParticipantRole `json:"role,omitempty"`
+    
+    // Granular permissions for single add
+    CanInvite  *bool `json:"can_invite,omitempty"`
+    CanRemove  *bool `json:"can_remove,omitempty"`
+    CanManage  *bool `json:"can_manage,omitempty"`
 }
 
-type UnifiedParticipantRequest struct {
-	// For single operations
-	UserID uuid.UUID              `json:"user_id,omitempty"`
-	Role   models.ParticipantRole `json:"role,omitempty"`
-
-	// For bulk operations
-	Participants []ParticipantRequest `json:"participants,omitempty"`
-	UserIDs      []uuid.UUID          `json:"user_ids,omitempty"`
-
-	// Operation type
-	Operation string `json:"operation,omitempty"` // "add_single", "add_bulk", "remove_single", "remove_bulk"
+type ParticipantRequest struct {
+    UserID    uuid.UUID              `json:"user_id"`
+    Role      models.ParticipantRole `json:"role,omitempty"`
+    
+    // Granular permissions for bulk add
+    CanInvite *bool `json:"can_invite,omitempty"`
+    CanRemove *bool `json:"can_remove,omitempty"`
+    CanManage *bool `json:"can_manage,omitempty"`
 }
 
 type ResolveIssueRequest struct {
@@ -43,4 +48,3 @@ type IssueResolutionData struct {
 	Issue        *models.ApplicationIssue `json:"issue"`
 	ChatThreadID *uuid.UUID               `json:"chat_thread,omitempty"`
 }
-
