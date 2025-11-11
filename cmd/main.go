@@ -16,10 +16,10 @@ import (
 
 	applicants_repositories "town-planning-backend/applicants/repositories"
 	applications_repositories "town-planning-backend/applications/repositories"
+	applications_services "town-planning-backend/applications/services"
 	document_repositories "town-planning-backend/documents/repositories"
 	stands_repositories "town-planning-backend/stands/repositories"
 	users_repositories "town-planning-backend/users/repositories"
-	applications_services "town-planning-backend/applications/services"
 
 	// Routes
 
@@ -146,8 +146,6 @@ func main() {
 	config.Logger.Info("Initializing WebSocket hub for real-time chat features...")
 	wsHub := websocket.NewHub()
 	go wsHub.Run()
-
-	
 
 	// Serve static files
 	app.Static("/public", "./public")

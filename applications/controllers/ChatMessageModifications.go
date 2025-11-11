@@ -167,7 +167,7 @@ func (ac *ApplicationController) ReplyToMessageController(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"message": "User not found",
+			"message": "Please log out and log in again",
 		})
 	}
 

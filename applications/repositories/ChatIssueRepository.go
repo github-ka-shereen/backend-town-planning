@@ -28,7 +28,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 	assignedToGroupMemberID *uuid.UUID,
 	attachmentDocumentIDs []uuid.UUID,
 	createdBy string,
-) (*models.ApplicationIssue, *models.ChatThread, error) {
+) (*models.ApplicationIssue, *models.ChatThread, *models.ChatMessage, error) {
 	// Fetch application with group assignment and members
 	var application models.Application
 	err := tx.
@@ -39,14 +39,14 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, errors.New("application not found")
+			return nil, nil, nil, errors.New("application not found")
 		}
-		return nil, nil, fmt.Errorf("failed to fetch application: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to fetch application: %w", err)
 	}
 
 	// Validate we have an approval group
 	if application.ApprovalGroup == nil {
-		return nil, nil, errors.New("application has no approval group")
+		return nil, nil, nil, errors.New("application has no approval group")
 	}
 
 	// Check if user is an active member of the approval group
@@ -59,19 +59,19 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, nil, errors.New("user not authorized to raise issues for this application")
+			return nil, nil, nil, errors.New("user not authorized to raise issues for this application")
 		}
-		return nil, nil, fmt.Errorf("failed to fetch group member: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to fetch group member: %w", err)
 	}
 
 	// Check if user can raise issues
 	if !groupMember.CanRaiseIssues {
-		return nil, nil, errors.New("user does not have permission to raise issues")
+		return nil, nil, nil, errors.New("user does not have permission to raise issues")
 	}
 
 	// Check if there's an active group assignment
 	if len(application.GroupAssignments) == 0 {
-		return nil, nil, errors.New("no active group assignment found for this application")
+		return nil, nil, nil, errors.New("no active group assignment found for this application")
 	}
 
 	assignment := application.GroupAssignments[0]
@@ -84,7 +84,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 	}
 
 	if err := tempIssue.ValidateAssignment(); err != nil {
-		return nil, nil, fmt.Errorf("invalid assignment: %w", err)
+		return nil, nil, nil, fmt.Errorf("invalid assignment: %w", err)
 	}
 
 	// Additional validation specific to the context
@@ -96,37 +96,21 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 			Where("id = ? AND approval_group_id = ? AND is_active = ?",
 				assignedToGroupMemberID, application.ApprovalGroup.ID, true).
 			First(&assignedMember).Error; err != nil {
-			return nil, nil, errors.New("invalid group member assignment - member not found or inactive")
+			return nil, nil, nil, errors.New("invalid group member assignment - member not found or inactive")
 		}
 		if !assignedMember.CanApprove && !assignedMember.CanReject {
-			return nil, nil, errors.New("assigned group member does not have resolution permissions")
+			return nil, nil, nil, errors.New("assigned group member does not have resolution permissions")
 		}
 
 	case models.IssueAssignment_SPECIFIC_USER:
 		// Verify user exists and is active
+		// Debug in terminal
+		fmt.Println("Debug assignedToUserID", assignedToUserID)
+		fmt.Println("Debug assignedToGroupMemberID", assignedToGroupMemberID)
 		var assignedUser models.User
-		if err := tx.Where("id = ? AND is_active = ?", assignedToUserID, true).First(&assignedUser).Error; err != nil {
-			return nil, nil, errors.New("invalid user assignment - user not found or inactive")
+		if err := tx.Where("id = ? AND active = ?", assignedToUserID, true).First(&assignedUser).Error; err != nil {
+			return nil, nil, nil, errors.New("invalid user assignment - user not found or inactive")
 		}
-	}
-
-	// ========================================
-	// CREATE DECISION RECORD FIRST
-	// ========================================
-	decisionID := uuid.New()
-	decision := models.MemberApprovalDecision{
-		ID:                      decisionID,
-		AssignmentID:            assignment.ID,
-		MemberID:                groupMember.ID,
-		UserID:                  userID,
-		Status:                  models.DecisionPending,
-		AssignedAs:              groupMember.Role,
-		IsFinalApproverDecision: groupMember.IsFinalApprover,
-		WasAvailable:            groupMember.AvailabilityStatus == models.AvailabilityAvailable,
-	}
-
-	if err := tx.Create(&decision).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to create decision record: %w", err)
 	}
 
 	// ========================================
@@ -136,12 +120,11 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 		ID:                      uuid.New(),
 		ApplicationID:           application.ID,
 		AssignmentID:            assignment.ID,
-		RaisedByDecisionID:      decisionID,
+		RaisedByGroupMemberID:   groupMember.ID,
 		RaisedByUserID:          userID,
 		AssignmentType:          assignmentType,
 		AssignedToUserID:        assignedToUserID,
 		AssignedToGroupMemberID: assignedToGroupMemberID,
-		ChatThreadID:            nil, // Will be set after chat thread creation
 		Title:                   title,
 		Description:             description,
 		Priority:                priority,
@@ -150,7 +133,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 	}
 
 	if err := tx.Create(&issue).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to create issue: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create issue: %w", err)
 	}
 
 	// ========================================
@@ -169,7 +152,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 		assignedToGroupMemberID,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create chat thread: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create chat thread: %w", err)
 	}
 
 	// ========================================
@@ -177,13 +160,14 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 	// ========================================
 	issue.ChatThreadID = &chatThread.ID
 	if err := tx.Save(&issue).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to update issue with chat thread ID: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to update issue with chat thread ID: %w", err)
 	}
 
 	// ========================================
 	// CREATE INITIAL CHAT MESSAGE WITH OPTIONAL ATTACHMENTS
 	// ========================================
-	_, err = r.createInitialChatMessageWithAttachments(
+	var initialMessage *models.ChatMessage
+	initialMessage, err = r.createInitialChatMessageWithAttachments(
 		tx,
 		chatThread,
 		&groupMember,
@@ -191,7 +175,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 		attachmentDocumentIDs,
 	)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to create initial chat message with attachments: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to create initial chat message with attachments: %w", err)
 	}
 
 	// ========================================
@@ -199,14 +183,14 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 	// ========================================
 	assignment.IssuesRaised++
 	if err := tx.Save(&assignment).Error; err != nil {
-		return nil, nil, fmt.Errorf("failed to update assignment issue count: %w", err)
+		return nil, nil, nil, fmt.Errorf("failed to update assignment issue count: %w", err)
 	}
 
 	// Update final approval status if needed
 	if assignment.ReadyForFinalApproval && !assignment.IsReadyForFinalApproval() {
 		assignment.ReadyForFinalApproval = false
 		if err := tx.Save(&assignment).Error; err != nil {
-			return nil, nil, fmt.Errorf("failed to update final approval status: %w", err)
+			return nil, nil, nil, fmt.Errorf("failed to update final approval status: %w", err)
 		}
 	}
 
@@ -216,7 +200,7 @@ func (r *applicationRepository) RaiseApplicationIssueWithChatAndAttachments(
 		zap.String("chatThreadID", chatThread.ID.String()),
 		zap.Int("attachmentCount", len(attachmentDocumentIDs)))
 
-	return &issue, chatThread, nil
+	return &issue, chatThread, initialMessage, nil
 }
 
 // createChatThreadForIssue creates a chat thread with appropriate participants
@@ -530,7 +514,6 @@ func (repo *applicationRepository) AddParticipantToThread(
 
 // RemoveParticipantFromThread removes a user from a chat thread (soft delete)
 
-
 // GetThreadParticipants gets all active participants for a thread
 func (r *applicationRepository) GetThreadParticipants(threadID string) ([]models.ChatParticipant, error) {
 	var participants []models.ChatParticipant
@@ -667,7 +650,7 @@ func (r *applicationRepository) AddMultipleParticipantsToThread(
 	return createdParticipants, nil
 }
 
-// RemoveParticipantFromThread 
+// RemoveParticipantFromThread
 func (r *applicationRepository) RemoveParticipantFromThread(
 	tx *gorm.DB,
 	threadID uuid.UUID,
@@ -781,21 +764,3 @@ func (r *applicationRepository) GetUserByID(userID string) (*models.User, error)
 	return &user, nil
 }
 
-// incrementUnreadCounts increments unread counts for all participants except the specified user
-func (r *applicationRepository) incrementUnreadCounts(tx *gorm.DB, threadID string, excludeUserID uuid.UUID) error {
-	// Increment participant unread counts
-	if err := tx.Model(&models.ChatParticipant{}).
-		Where("thread_id = ? AND user_id != ? AND is_active = ?", threadID, excludeUserID, true).
-		UpdateColumn("unread_count", gorm.Expr("unread_count + ?", 1)).Error; err != nil {
-		return fmt.Errorf("failed to increment participant unread counts: %w", err)
-	}
-
-	// Increment thread unread count
-	if err := tx.Model(&models.ChatThread{}).
-		Where("id = ?", threadID).
-		UpdateColumn("unread_count", gorm.Expr("unread_count + ?", 1)).Error; err != nil {
-		return fmt.Errorf("failed to increment thread unread count: %w", err)
-	}
-
-	return nil
-}

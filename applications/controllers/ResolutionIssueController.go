@@ -45,7 +45,7 @@ func (ac *ApplicationController) ResolveIssueController(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"message": "User not found",
+			"message": "Please log out and log in again",
 		})
 	}
 
@@ -218,7 +218,7 @@ func (ac *ApplicationController) ReopenIssueController(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"message": "User not found",
+			"message": "Please log out and log in again",
 		})
 	}
 

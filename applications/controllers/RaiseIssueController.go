@@ -3,6 +3,8 @@ package controllers
 import (
 	"fmt"
 	"mime/multipart"
+	"time"
+	applicationRepositories "town-planning-backend/applications/repositories"
 	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 	documents_requests "town-planning-backend/documents/requests"
@@ -79,7 +81,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	if err != nil {
 		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
 			"success": false,
-			"message": "User not found",
+			"message": "Please log out and log in again",
 		})
 	}
 
@@ -128,7 +130,7 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 	}
 
 	// Process issue creation with chat thread and file attachments
-	issue, chatThread, err := ac.ApplicationRepo.RaiseApplicationIssueWithChatAndAttachments(
+	issue, chatThread, initialMessage, err := ac.ApplicationRepo.RaiseApplicationIssueWithChatAndAttachments(
 		tx,
 		applicationID,
 		userUUID,
@@ -162,6 +164,31 @@ func (ac *ApplicationController) RaiseIssueController(c *fiber.Ctx) error {
 			"error":   err.Error(),
 		})
 	}
+
+	// For the sake of broadcasting the message we need to create the EnhancedChatMessage
+	enhancedMessage := &applicationRepositories.EnhancedChatMessage{
+		ID:          initialMessage.ID, // Generate a new message ID
+		Content:     initialMessage.Content,
+		MessageType: initialMessage.MessageType,
+		Status:      "SENT", // Or the appropriate status
+		CreatedAt:   initialMessage.CreatedAt.Format(time.RFC3339),
+		Sender: &applicationRepositories.UserSummary{
+			ID:        userUUID,
+			FirstName: user.FirstName,
+			LastName:  user.LastName,
+			Email:     user.Email,
+		},
+	}
+
+	// Increment unread counts for all participants except sender
+	if err := ac.incrementUnreadCounts(tx, chatThread.ID.String(), userUUID); err != nil {
+		config.Logger.Warn("Failed to increment unread counts",
+			zap.Error(err),
+			zap.String("threadID", chatThread.ID.String()))
+	}
+
+	// Now broadcast the message
+	ac.broadcastNewMessage(chatThread.ID.String(), *enhancedMessage, userUUID)
 
 	// --- Commit Database Transaction ---
 	if err := tx.Commit().Error; err != nil {
@@ -252,7 +279,6 @@ func (ac *ApplicationController) processChatAttachments(
 
 	return documentIDs, nil
 }
-
 
 func getFormValuePtr(form *multipart.Form, key string) *string {
 	if values, exists := form.Value[key]; exists && len(values) > 0 && values[0] != "" {

@@ -225,7 +225,6 @@ type MemberApprovalDecision struct {
 	User           User                       `gorm:"foreignKey:UserID" json:"user"`
 	OriginalMember *ApprovalGroupMember       `gorm:"foreignKey:OriginalMemberID" json:"original_member,omitempty"`
 	Comments       []Comment                  `gorm:"foreignKey:DecisionID" json:"comments,omitempty"`
-	Issues         []ApplicationIssue         `gorm:"foreignKey:RaisedByDecisionID" json:"issues,omitempty"`
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
@@ -244,7 +243,6 @@ type ApplicationIssue struct {
 	// ========================================
 	// Link to the decision record where this issue was raised
 	// This gives us access to all decision context (member, role, status, etc.)
-	RaisedByDecisionID uuid.UUID `gorm:"type:uuid;not null;index" json:"raised_by_decision_id"`
 
 	// Direct link to user for quick queries (denormalized for performance)
 	// User details (name, email, etc.) come from User table relationship
@@ -291,8 +289,9 @@ type ApplicationIssue struct {
 	Assignment  ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment"`
 
 	// Who raised the issue
-	RaisedByDecision MemberApprovalDecision `gorm:"foreignKey:RaisedByDecisionID" json:"raised_by_decision"`
-	RaisedByUser     User                   `gorm:"foreignKey:RaisedByUserID" json:"raised_by_user"`
+	RaisedByGroupMemberID uuid.UUID           `gorm:"type:uuid;not null;index" json:"raised_by_group_member_id"`
+	RaisedByUser          User                `gorm:"foreignKey:RaisedByUserID" json:"raised_by_user"`
+	RaisedByGroupMember   ApprovalGroupMember `gorm:"foreignKey:RaisedByGroupMemberID" json:"raised_by_group_member"`
 
 	// Who can/did resolve
 	AssignedToUser        *User                `gorm:"foreignKey:AssignedToUserID" json:"assigned_to_user,omitempty"`
@@ -475,21 +474,22 @@ func (issue *ApplicationIssue) CanUserResolveIssue(userID uuid.UUID) bool {
 		return false // Already resolved
 	}
 
+	// Allow the issue creator to always resolve their own issues
+	if issue.RaisedByUserID == userID {
+		return true
+	}
+
 	switch issue.AssignmentType {
 	case IssueAssignment_COLLABORATIVE:
-		// Any authenticated staff member can resolve
 		return true
 
 	case IssueAssignment_GROUP_MEMBER:
-		// Only the specifically assigned group member can resolve
 		if issue.AssignedToGroupMemberID == nil {
 			return false
 		}
-		// Check if the user is the assigned group member
 		return issue.AssignedToGroupMember != nil && issue.AssignedToGroupMember.UserID == userID
 
 	case IssueAssignment_SPECIFIC_USER:
-		// Only the specifically assigned user can resolve
 		if issue.AssignedToUserID == nil {
 			return false
 		}
