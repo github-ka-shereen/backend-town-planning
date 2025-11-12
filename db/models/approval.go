@@ -332,7 +332,8 @@ type FinalApproval struct {
 	// Relationships
 	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
 	// Assignment  *ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment,omitempty"` // ← REMOVE THIS LINE
-	Approver User `gorm:"foreignKey:ApproverID" json:"approver"`
+	Approver             User `gorm:"foreignKey:ApproverID" json:"approver"`
+	IsSystemAutoDecision bool `gorm:"default:false" json:"is_system_auto_decision"`
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`

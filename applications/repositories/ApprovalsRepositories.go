@@ -120,30 +120,145 @@ func (r *applicationRepository) ProcessApplicationApproval(
 		return nil, err
 	}
 
-	// Check if ready for final approval (for regular members)
-	if !groupMember.IsFinalApprover {
-		readyForFinalApproval := assignment.AllRegularMembersApproved() &&
-			assignment.IssuesRaised == assignment.IssuesResolved
+	// ========================================
+	// AUTO-REJECTION CHECK FOR APPROVALS
+	// ========================================
 
-		if readyForFinalApproval {
+	if !groupMember.IsFinalApprover {
+		// Get all regular members (excluding final approver)
+		var regularMembers []models.ApprovalGroupMember
+		if err := tx.
+			Where("approval_group_id = ? AND is_active = ? AND is_final_approver = ?",
+				assignment.ApprovalGroupID, true, false).
+			Find(&regularMembers).Error; err != nil {
+			return nil, err
+		}
+
+		// Count how many regular members have made decisions (not pending)
+		var decidedCount int64
+		var rejectedCount int64
+
+		if err := tx.Model(&models.MemberApprovalDecision{}).
+			Joins("JOIN approval_group_members ON approval_group_members.id = member_approval_decisions.member_id").
+			Where("member_approval_decisions.assignment_id = ? AND member_approval_decisions.deleted_at IS NULL", assignment.ID).
+			Where("approval_group_members.is_final_approver = ? AND approval_group_members.is_active = ?", false, true).
+			Where("member_approval_decisions.status != ?", models.DecisionPending).
+			Count(&decidedCount).Error; err != nil {
+			return nil, err
+		}
+
+		if err := tx.Model(&models.MemberApprovalDecision{}).
+			Joins("JOIN approval_group_members ON approval_group_members.id = member_approval_decisions.member_id").
+			Where("member_approval_decisions.assignment_id = ? AND member_approval_decisions.deleted_at IS NULL", assignment.ID).
+			Where("approval_group_members.is_final_approver = ? AND approval_group_members.is_active = ?", false, true).
+			Where("member_approval_decisions.status = ?", models.DecisionRejected).
+			Count(&rejectedCount).Error; err != nil {
+			return nil, err
+		}
+
+		regularMemberCount := int64(len(regularMembers))
+		allRegularMembersDecided := decidedCount >= regularMemberCount
+		hasAnyRejection := rejectedCount > 0
+
+		config.Logger.Info("Auto-rejection check on approval",
+			zap.String("applicationID", applicationID),
+			zap.Int64("regularMemberCount", regularMemberCount),
+			zap.Int64("decidedCount", decidedCount),
+			zap.Int64("rejectedCount", rejectedCount),
+			zap.Bool("allDecided", allRegularMembersDecided),
+			zap.Bool("hasRejection", hasAnyRejection))
+
+		// If all regular members decided AND there's any rejection -> AUTO-REJECT
+		if allRegularMembersDecided && hasAnyRejection {
+			application.Status = models.RejectedApplication
+			assignment.CompletedAt = &now
+			assignment.FinalDecisionAt = &now
+			assignment.ReadyForFinalApproval = false
+
+			// Get the actual final approver from the group
+			var finalApproverMember models.ApprovalGroupMember
+			err = tx.
+				Where("approval_group_id = ? AND is_final_approver = ? AND is_active = ?",
+					assignment.ApprovalGroupID, true, true).
+				First(&finalApproverMember).Error
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to find final approver for auto-rejection: %w", err)
+			}
+
+			// Create final approval record for the auto-rejection
+			rejectionReason := "Application auto-rejected due to member rejections"
+			finalApproval := models.FinalApproval{
+				ID:                    uuid.New(),
+				ApplicationID:         application.ID,
+				ApproverID:            finalApproverMember.UserID,
+				Decision:              models.RejectedApplication,
+				DecisionAt:            now,
+				Comment:               &rejectionReason,
+				OverrodeGroupDecision: false,
+				IsSystemAutoDecision:  true,
+			}
+			if err := tx.Create(&finalApproval).Error; err != nil {
+				return nil, err
+			}
+			assignment.FinalDecisionID = &finalApproval.ID
+
+			if err := tx.Save(&application).Error; err != nil {
+				return nil, err
+			}
+			if err := tx.Save(&assignment).Error; err != nil {
+				return nil, err
+			}
+
+			config.Logger.Info("Auto-rejected application after approval (other members rejected)",
+				zap.String("applicationID", applicationID),
+				zap.String("approvingMember", groupMember.User.FirstName+" "+groupMember.User.LastName))
+
+			// Prepare result
+			result := &ApprovalResult{
+				ApplicationStatus:     application.Status,
+				IsFinalApprover:       false,
+				ReadyForFinalApproval: false,
+				ApprovedCount:         assignment.ApprovedCount,
+				TotalMembers:          assignment.TotalMembers,
+				UnresolvedIssues:      assignment.IssuesRaised - assignment.IssuesResolved,
+			}
+
+			return result, nil
+		}
+
+		// If all regular members decided AND no rejections -> Ready for final approval
+		if allRegularMembersDecided && !hasAnyRejection {
 			assignment.ReadyForFinalApproval = true
-			now := time.Now()
 			assignment.FinalApproverAssignedAt = &now
 			if err := tx.Save(&assignment).Error; err != nil {
 				return nil, err
 			}
+
+			config.Logger.Info("All regular members approved, ready for final approval",
+				zap.String("applicationID", applicationID))
 		}
 	}
 
 	// Update application status if final approver
 	if groupMember.IsFinalApprover {
-		isReadyForFinalApproval := assignment.AllRegularMembersApproved() &&
-			assignment.IssuesRaised == assignment.IssuesResolved
+		isReadyForFinalApproval := r.isAssignmentReadyForFinalApproval(tx, &assignment)
 
 		if isReadyForFinalApproval {
 			application.Status = models.ApprovedApplication
 			assignment.CompletedAt = &now
 			assignment.FinalDecisionAt = &now
+
+			// Get application's final approver
+			var finalApproverMember models.ApprovalGroupMember
+			err = tx.
+				Where("approval_group_id = ? AND is_final_approver = ? AND is_active = ?",
+					assignment.ApprovalGroupID, true, true).
+				First(&finalApproverMember).Error
+
+			if err != nil {
+				return nil, fmt.Errorf("failed to find final approver: %w", err)
+			}
 
 			// Check if there's an active final approval (non-deleted)
 			var existingActiveFinalApproval models.FinalApproval
@@ -151,14 +266,29 @@ func (r *applicationRepository) ProcessApplicationApproval(
 				First(&existingActiveFinalApproval).Error
 
 			if err == nil {
-				// Active final approval exists - this shouldn't happen, but handle it
-				return nil, errors.New("active final approval already exists for this application")
+				// Active final approval exists - this shouldn't happen after revocation
+				config.Logger.Warn("Active final approval already exists, but proceeding",
+					zap.String("applicationID", applicationID),
+					zap.String("finalApprovalID", existingActiveFinalApproval.ID.String()))
+
+				// Option 1: Update existing one
+				existingActiveFinalApproval.ApproverID = finalApproverMember.UserID
+				existingActiveFinalApproval.Decision = models.ApprovedApplication
+				existingActiveFinalApproval.DecisionAt = now
+				existingActiveFinalApproval.Comment = comment
+				existingActiveFinalApproval.UpdatedAt = now
+
+				if err := tx.Save(&existingActiveFinalApproval).Error; err != nil {
+					return nil, fmt.Errorf("failed to update final approval: %w", err)
+				}
+				assignment.FinalDecisionID = &existingActiveFinalApproval.ID
+
 			} else if errors.Is(err, gorm.ErrRecordNotFound) {
-				// No active final approval exists - create new one
+				// No active final approval exists - create new one (NORMAL CASE after revocation)
 				finalApproval := models.FinalApproval{
 					ID:            uuid.New(),
 					ApplicationID: application.ID,
-					ApproverID:    userID,
+					ApproverID:    finalApproverMember.UserID,
 					Decision:      models.ApprovedApplication,
 					DecisionAt:    now,
 					Comment:       comment,
@@ -202,8 +332,7 @@ func (r *applicationRepository) ProcessApplicationApproval(
 
 	// If final approver just approved, update the ready status
 	if groupMember.IsFinalApprover {
-		result.ReadyForFinalApproval = assignment.AllRegularMembersApproved() &&
-			assignment.IssuesRaised == assignment.IssuesResolved
+		result.ReadyForFinalApproval = r.isAssignmentReadyForFinalApproval(tx, &assignment)
 	}
 
 	return result, nil
@@ -261,20 +390,39 @@ func (r *applicationRepository) ProcessApplicationRejection(
 	assignment := application.GroupAssignments[0]
 	now := time.Now()
 
-	// Create rejection decision
-	decision := models.MemberApprovalDecision{
-		ID:                      uuid.New(),
-		AssignmentID:            assignment.ID,
-		MemberID:                groupMember.ID,
-		UserID:                  userID,
-		Status:                  models.DecisionRejected,
-		DecidedAt:               &now,
-		AssignedAs:              groupMember.Role,
-		IsFinalApproverDecision: groupMember.IsFinalApprover,
-		WasAvailable:            groupMember.AvailabilityStatus == models.AvailabilityAvailable,
+	// Check if user already made a decision
+	var existingDecision models.MemberApprovalDecision
+	err = tx.
+		Where("assignment_id = ? AND member_id = ?", assignment.ID, groupMember.ID).
+		First(&existingDecision).Error
+
+	var decision models.MemberApprovalDecision
+
+	if err == nil {
+		// Update existing decision
+		decision = existingDecision
+		decision.Status = models.DecisionRejected
+		decision.DecidedAt = &now
+		decision.UpdatedAt = now
+	} else if errors.Is(err, gorm.ErrRecordNotFound) {
+		// Create new decision only if none exists
+		decision = models.MemberApprovalDecision{
+			ID:                      uuid.New(),
+			AssignmentID:            assignment.ID,
+			MemberID:                groupMember.ID,
+			UserID:                  userID,
+			Status:                  models.DecisionRejected,
+			DecidedAt:               &now,
+			AssignedAs:              groupMember.Role,
+			IsFinalApproverDecision: groupMember.IsFinalApprover,
+			WasAvailable:            groupMember.AvailabilityStatus == models.AvailabilityAvailable,
+		}
+	} else {
+		return nil, err
 	}
 
-	if err := tx.Create(&decision).Error; err != nil {
+	// Save decision (this will update if existing, create if new)
+	if err := tx.Save(&decision).Error; err != nil {
 		return nil, err
 	}
 
@@ -303,40 +451,62 @@ func (r *applicationRepository) ProcessApplicationRejection(
 	}
 
 	// ========================================
-	// SMART TWO-PHASE REJECTION LOGIC
+	// AUTO-REJECTION LOGIC FOR REJECTIONS
 	// ========================================
 
-	// Get updated counts after this rejection
-	var updatedAssignment models.ApplicationGroupAssignment
-	if err := tx.Where("id = ?", assignment.ID).First(&updatedAssignment).Error; err != nil {
-		return nil, err
-	}
-
-	// Get all regular members count (excluding final approver)
-	var regularMemberCount int64
-	if err := tx.Model(&models.ApprovalGroupMember{}).
+	// Get all regular members (excluding final approver)
+	var regularMembers []models.ApprovalGroupMember
+	if err := tx.
 		Where("approval_group_id = ? AND is_active = ? AND is_final_approver = ?",
 			assignment.ApprovalGroupID, true, false).
-		Count(&regularMemberCount).Error; err != nil {
+		Find(&regularMembers).Error; err != nil {
 		return nil, err
 	}
 
-	// Check if ALL regular members have decided (approved or rejected)
-	allRegularMembersDecided := (updatedAssignment.ApprovedCount + updatedAssignment.RejectedCount) >= int(regularMemberCount)
-	hasAnyRejection := updatedAssignment.RejectedCount > 0
+	// Count how many regular members have made decisions (not pending)
+	var decidedCount int64
+	var rejectedCount int64
+
+	if err := tx.Model(&models.MemberApprovalDecision{}).
+		Joins("JOIN approval_group_members ON approval_group_members.id = member_approval_decisions.member_id").
+		Where("member_approval_decisions.assignment_id = ? AND member_approval_decisions.deleted_at IS NULL", assignment.ID).
+		Where("approval_group_members.is_final_approver = ? AND approval_group_members.is_active = ?", false, true).
+		Where("member_approval_decisions.status != ?", models.DecisionPending).
+		Count(&decidedCount).Error; err != nil {
+		return nil, err
+	}
+
+	if err := tx.Model(&models.MemberApprovalDecision{}).
+		Joins("JOIN approval_group_members ON approval_group_members.id = member_approval_decisions.member_id").
+		Where("member_approval_decisions.assignment_id = ? AND member_approval_decisions.deleted_at IS NULL", assignment.ID).
+		Where("approval_group_members.is_final_approver = ? AND approval_group_members.is_active = ?", false, true).
+		Where("member_approval_decisions.status = ?", models.DecisionRejected).
+		Count(&rejectedCount).Error; err != nil {
+		return nil, err
+	}
+
+	regularMemberCount := int64(len(regularMembers))
+	allRegularMembersDecided := decidedCount >= regularMemberCount
+	hasAnyRejection := rejectedCount > 0
+
+	config.Logger.Info("Auto-rejection check on rejection",
+		zap.String("applicationID", applicationID),
+		zap.Int64("regularMemberCount", regularMemberCount),
+		zap.Int64("decidedCount", decidedCount),
+		zap.Int64("rejectedCount", rejectedCount),
+		zap.Bool("allDecided", allRegularMembersDecided),
+		zap.Bool("hasRejection", hasAnyRejection),
+		zap.Bool("isFinalApprover", groupMember.IsFinalApprover))
 
 	// PHASE 1: Regular member rejects, but not all members have decided yet
 	if !groupMember.IsFinalApprover && !allRegularMembersDecided {
-		// Keep application under review - other departments still need to review
+		// Keep application under review - other members still need to review
 		application.Status = models.UnderReviewApplication
 		assignment.ReadyForFinalApproval = false
 
-		config.Logger.Info("Regular member rejected, waiting for other departments",
+		config.Logger.Info("Regular member rejected, waiting for other members",
 			zap.String("applicationID", applicationID),
-			zap.String("rejectingMember", groupMember.User.FirstName+" "+groupMember.User.LastName),
-			zap.Int("approvedCount", updatedAssignment.ApprovedCount),
-			zap.Int("rejectedCount", updatedAssignment.RejectedCount),
-			zap.Int64("totalRegularMembers", regularMemberCount))
+			zap.String("rejectingMember", groupMember.User.FirstName+" "+groupMember.User.LastName))
 
 		// PHASE 2: All regular members decided, check if we should auto-reject
 	} else if !groupMember.IsFinalApprover && allRegularMembersDecided && hasAnyRejection {
@@ -346,15 +516,27 @@ func (r *applicationRepository) ProcessApplicationRejection(
 		assignment.FinalDecisionAt = &now
 		assignment.ReadyForFinalApproval = false
 
-		// Create final approval record for the auto-rejection
+		// Get the actual final approver from the group
+		var finalApproverMember models.ApprovalGroupMember
+		err = tx.
+			Where("approval_group_id = ? AND is_final_approver = ? AND is_active = ?",
+				assignment.ApprovalGroupID, true, true).
+			First(&finalApproverMember).Error
+
+		if err != nil {
+			return nil, fmt.Errorf("failed to find final approver for auto-rejection: %w", err)
+		}
+
+		// Create final approval record for the auto-rejection using FINAL APPROVER's ID
 		finalApproval := models.FinalApproval{
 			ID:                    uuid.New(),
 			ApplicationID:         application.ID,
-			ApproverID:            userID, // The last rejecting member
+			ApproverID:            finalApproverMember.UserID,
 			Decision:              models.RejectedApplication,
 			DecisionAt:            now,
 			Comment:               &rejectionContent,
 			OverrodeGroupDecision: false,
+			IsSystemAutoDecision:  true,
 		}
 		if err := tx.Create(&finalApproval).Error; err != nil {
 			return nil, err
@@ -363,9 +545,10 @@ func (r *applicationRepository) ProcessApplicationRejection(
 
 		config.Logger.Info("Auto-rejected application due to regular member rejection",
 			zap.String("applicationID", applicationID),
-			zap.Int("rejectedCount", updatedAssignment.RejectedCount))
+			zap.String("finalApproverID", finalApproverMember.UserID.String()),
+			zap.Int64("rejectedCount", rejectedCount))
 
-		// PHASE 2: All regular members approved, ready for final approver
+		// PHASE 3: All regular members approved, ready for final approver (shouldn't happen in rejection flow)
 	} else if !groupMember.IsFinalApprover && allRegularMembersDecided && !hasAnyRejection {
 		// All regular members approved - ready for final approval
 		application.Status = models.UnderReviewApplication
@@ -440,59 +623,4 @@ func (r *applicationRepository) ProcessApplicationRejection(
 	}
 
 	return result, nil
-}
-
-// updateAssignmentStatistics updates the statistics for a group assignment
-func (r *applicationRepository) updateAssignmentStatistics(tx *gorm.DB, assignmentID uuid.UUID) error {
-	var assignment models.ApplicationGroupAssignment
-
-	if err := tx.Where("id = ?", assignmentID).First(&assignment).Error; err != nil {
-		return fmt.Errorf("failed to find assignment: %w", err)
-	}
-
-	// Count decisions by status with better error handling
-	var stats struct {
-		ApprovedCount int64
-		RejectedCount int64
-		PendingCount  int64
-		TotalMembers  int64
-	}
-
-	// Get total active members
-	if err := tx.Model(&models.ApprovalGroupMember{}).
-		Where("approval_group_id = ? AND is_active = ?", assignment.ApprovalGroupID, true).
-		Count(&stats.TotalMembers).Error; err != nil {
-		return fmt.Errorf("failed to count members: %w", err)
-	}
-
-	// Count ONLY NON-DELETED decisions (soft delete aware)
-	if err := tx.Model(&models.MemberApprovalDecision{}).
-		Where("assignment_id = ? AND deleted_at IS NULL", assignmentID).
-		Select("COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved_count, " +
-			"COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) as rejected_count, " +
-			"COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending_count").
-		Scan(&stats).Error; err != nil {
-		return fmt.Errorf("failed to count decisions: %w", err)
-	}
-
-	// Count resolved issues
-	var resolvedIssues int64
-	if err := tx.Model(&models.ApplicationIssue{}).
-		Where("assignment_id = ? AND is_resolved = ?", assignmentID, true).
-		Count(&resolvedIssues).Error; err != nil {
-		return fmt.Errorf("failed to count resolved issues: %w", err)
-	}
-
-	// Update assignment
-	assignment.ApprovedCount = int(stats.ApprovedCount)
-	assignment.RejectedCount = int(stats.RejectedCount)
-	assignment.PendingCount = int(stats.PendingCount)
-	assignment.TotalMembers = int(stats.TotalMembers)
-	assignment.IssuesResolved = int(resolvedIssues)
-
-	if err := tx.Save(&assignment).Error; err != nil {
-		return fmt.Errorf("failed to save assignment: %w", err)
-	}
-
-	return nil
 }
