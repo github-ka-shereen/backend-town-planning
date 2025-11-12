@@ -145,5 +145,12 @@ func ConfigureDatabase() *gorm.DB {
 		log.Println("Tables migrated successfully")
 	}
 
+	// Run extra migrations
+	//  if err := CreateFinalApprovalPartialIndex(db); err != nil {
+    //     log.Printf("ERROR: Failed to create partial unique index: %v", err) // Changed to ERROR
+    // } else {
+    //     log.Println("SUCCESS: Partial unique index created successfully")
+    // }
+
 	return db
 }

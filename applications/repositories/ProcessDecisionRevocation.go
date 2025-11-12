@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
 	"town-planning-backend/applications/requests"
 	"town-planning-backend/db/models"
 
@@ -26,6 +25,7 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 		Preload("GroupAssignments", "is_active = ?", true).
 		Preload("GroupAssignments.Decisions").
 		Preload("GroupAssignments.Decisions.Comments").
+		Preload("FinalApproval"). // Load the final approval
 		Where("id = ?", applicationID).
 		First(&application).Error
 
@@ -93,7 +93,7 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 		RevokedBy:      userID,
 		Reason:         reason,
 		RevokedAt:      now,
-		PreviousStatus: originalDecisionStatus, // Use the stored original status
+		PreviousStatus: originalDecisionStatus,
 	}
 
 	if err := tx.Create(&revocation).Error; err != nil {
@@ -102,12 +102,24 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 
 	// SOFT DELETE all comments associated with this decision first
 	if len(userDecision.Comments) > 0 {
-		// Soft delete all comments linked to this decision
 		if err := tx.Model(&models.Comment{}).
 			Where("decision_id = ?", userDecision.ID).
 			Update("deleted_at", now).Error; err != nil {
 			return nil, fmt.Errorf("failed to soft delete decision comments: %w", err)
 		}
+	}
+
+	// Handle FinalApproval record if this is a final approver revocation
+	if groupMember.IsFinalApprover && application.FinalApproval != nil {
+		// Soft delete the final approval record for auditing
+		if err := tx.Model(&models.FinalApproval{}).
+			Where("id = ?", application.FinalApproval.ID).
+			Update("deleted_at", now).Error; err != nil {
+			return nil, fmt.Errorf("failed to soft delete final approval: %w", err)
+		}
+		
+		// Clear the assignment's FinalDecisionID reference
+		assignment.FinalDecisionID = nil
 	}
 
 	// Reset the decision to pending state
@@ -125,43 +137,38 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 	}
 
 	// Reset application and assignment based on who revoked and what was revoked
-	// Use originalDecisionStatus instead of userDecision.Status (which is now PENDING)
 	switch {
 	case groupMember.IsFinalApprover && application.Status == models.ApprovedApplication:
 		// Final approver revoking final approval - revert to ready for final approval
 		application.Status = models.UnderReviewApplication
-		assignment.ReadyForFinalApproval = true
 		assignment.CompletedAt = nil
 		assignment.FinalDecisionAt = nil
-		result.ReadyForFinalApproval = true
 		result.Message = "Final approval revoked, application returned for review"
 
 	case groupMember.IsFinalApprover && application.Status == models.RejectedApplication:
 		// Final approver revoking rejection - revert to ready for final approval
 		application.Status = models.UnderReviewApplication
-		assignment.ReadyForFinalApproval = true
 		assignment.CompletedAt = nil
 		assignment.FinalDecisionAt = nil
-		result.ReadyForFinalApproval = true
 		result.Message = "Rejection revoked, application returned for review"
 
 	case !groupMember.IsFinalApprover && originalDecisionStatus == models.DecisionApproved:
 		// Regular member revoking approval
 		application.Status = models.UnderReviewApplication
-		assignment.ReadyForFinalApproval = false
-		result.ReadyForFinalApproval = false
 		result.Message = "Approval revoked"
 
 	case !groupMember.IsFinalApprover && originalDecisionStatus == models.DecisionRejected:
 		// Regular member revoking rejection
 		application.Status = models.UnderReviewApplication
-		assignment.ReadyForFinalApproval = false
-		result.ReadyForFinalApproval = false
 		result.Message = "Rejection revoked"
 
 	default:
 		return nil, errors.New("cannot revoke decision in current state")
 	}
+
+	// ALWAYS reset ReadyForFinalApproval when any decision is revoked
+	assignment.ReadyForFinalApproval = false
+	assignment.FinalApproverAssignedAt = nil
 
 	// Save application and assignment changes
 	if err := tx.Save(&application).Error; err != nil {
@@ -172,12 +179,29 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 		return nil, err
 	}
 
-	// Update assignment statistics (this will now exclude soft-deleted decisions)
+	// CRITICAL: Update assignment statistics AFTER all changes
 	if err := r.updateAssignmentStatistics(tx, assignment.ID); err != nil {
 		return nil, err
 	}
 
+	// Now check if it should be ready for final approval based on updated counts
+	var updatedAssignment models.ApplicationGroupAssignment
+	if err := tx.Where("id = ?", assignment.ID).First(&updatedAssignment).Error; err != nil {
+		return nil, err
+	}
+
+	// Calculate if ready for final approval based on current state
+	readyForFinalApproval := r.isAssignmentReadyForFinalApproval(tx, &updatedAssignment)
+	if readyForFinalApproval {
+		updatedAssignment.ReadyForFinalApproval = true
+		updatedAssignment.FinalApproverAssignedAt = &now
+		if err := tx.Save(&updatedAssignment).Error; err != nil {
+			return nil, err
+		}
+	}
+
 	result.NewStatus = application.Status
+	result.ReadyForFinalApproval = updatedAssignment.ReadyForFinalApproval
 
 	return &requests.RevokeDecisionResponse{
 		Success:               true,
@@ -187,6 +211,38 @@ func (r *applicationRepository) ProcessDecisionRevocation(
 		WasFinalApprover:      result.WasFinalApprover,
 		PreviousStatus:        string(result.PreviousStatus),
 	}, nil
+}
+
+// Helper function to check if assignment is ready for final approval
+func (r *applicationRepository) isAssignmentReadyForFinalApproval(tx *gorm.DB, assignment *models.ApplicationGroupAssignment) bool {
+	// Get the approval group with members
+	var group models.ApprovalGroup
+	if err := tx.
+		Preload("Members", "is_active = ? AND is_final_approver = ?", true, false). // Only regular members
+		Where("id = ?", assignment.ApprovalGroupID).
+		First(&group).Error; err != nil {
+		return false
+	}
+
+	// Count regular members
+	regularMemberCount := 0
+	for _, member := range group.Members {
+		if !member.IsFinalApprover && member.IsActive && member.CanApprove {
+			regularMemberCount++
+		}
+	}
+
+	if regularMemberCount == 0 {
+		return false
+	}
+
+	// Check if all regular members have approved
+	allRegularMembersApproved := assignment.ApprovedCount >= regularMemberCount
+	
+	// Check if no unresolved issues
+	noUnresolvedIssues := assignment.IssuesRaised == assignment.IssuesResolved
+
+	return allRegularMembersApproved && noUnresolvedIssues
 }
 
 // canUserRevokeDecision checks if a user can revoke their decision

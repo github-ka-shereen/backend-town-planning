@@ -317,8 +317,7 @@ type ApplicationIssue struct {
 // FinalApproval represents the final decision by the designated approver
 type FinalApproval struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
-	ApplicationID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"application_id"`
-	// AssignmentID  *uuid.UUID `gorm:"type:uuid;index" json:"assignment_id"` // ← REMOVE THIS LINE
+	ApplicationID uuid.UUID `gorm:"type:uuid;not null" json:"application_id"`
 	ApproverID    uuid.UUID `gorm:"type:uuid;not null;index" json:"approver_id"`
 
 	// Final decision
@@ -333,7 +332,7 @@ type FinalApproval struct {
 	// Relationships
 	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
 	// Assignment  *ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment,omitempty"` // ← REMOVE THIS LINE
-	Approver    User        `gorm:"foreignKey:ApproverID" json:"approver"`
+	Approver User `gorm:"foreignKey:ApproverID" json:"approver"`
 
 	// Audit fields
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
