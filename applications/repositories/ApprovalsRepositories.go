@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"time"
+	"town-planning-backend/config"
 	"town-planning-backend/db/models"
 
 	"github.com/google/uuid"
+	"go.uber.org/zap"
 	"gorm.io/gorm"
 )
 
@@ -119,9 +121,9 @@ func (r *applicationRepository) ProcessApplicationApproval(
 	}
 
 	// Check if ready for final approval
-	readyForFinalApproval := false
+	// Check if ready for final approval (for regular members)
 	if !groupMember.IsFinalApprover {
-		readyForFinalApproval = assignment.AllRegularMembersApproved() &&
+		readyForFinalApproval := assignment.AllRegularMembersApproved() &&
 			assignment.IssuesRaised == assignment.IssuesResolved
 
 		if readyForFinalApproval {
@@ -135,40 +137,63 @@ func (r *applicationRepository) ProcessApplicationApproval(
 	}
 
 	// Update application status if final approver
-	if groupMember.IsFinalApprover && readyForFinalApproval {
-		application.Status = models.ApprovedApplication
-		assignment.CompletedAt = &now
-		assignment.FinalDecisionAt = &now
+	// Update application status if final approver
+	if groupMember.IsFinalApprover {
+		// For final approver, check if the application is ready for final approval
+		isReadyForFinalApproval := assignment.AllRegularMembersApproved() &&
+			assignment.IssuesRaised == assignment.IssuesResolved
 
-		// Create final approval record
-		finalApproval := models.FinalApproval{
-			ID:            uuid.New(),
-			ApplicationID: application.ID,
-			ApproverID:    userID,
-			Decision:      models.ApprovedApplication,
-			DecisionAt:    now,
-			Comment:       comment,
-		}
-		if err := tx.Create(&finalApproval).Error; err != nil {
-			return nil, err
-		}
+		if isReadyForFinalApproval {
+			application.Status = models.ApprovedApplication
+			assignment.CompletedAt = &now
+			assignment.FinalDecisionAt = &now
 
-		if err := tx.Save(&application).Error; err != nil {
-			return nil, err
-		}
-		if err := tx.Save(&assignment).Error; err != nil {
-			return nil, err
+			// Create final approval record
+			finalApproval := models.FinalApproval{
+				ID:            uuid.New(),
+				ApplicationID: application.ID,
+				// AssignmentID:  &assignment.ID,  // ← REMOVE THIS LINE
+				ApproverID: userID,
+				Decision:   models.ApprovedApplication,
+				DecisionAt: now,
+				Comment:    comment,
+			}
+			if err := tx.Create(&finalApproval).Error; err != nil {
+				return nil, err
+			}
+
+			// ← ADD THIS: Link the final decision back to the assignment
+			assignment.FinalDecisionID = &finalApproval.ID
+
+			if err := tx.Save(&application).Error; err != nil {
+				return nil, err
+			}
+			if err := tx.Save(&assignment).Error; err != nil {
+				return nil, err
+			}
+		} else {
+			// If not ready for final approval, this shouldn't happen for final approver
+			// but we'll handle it gracefully
+			config.Logger.Warn("Final approver attempted to approve application not ready for final approval",
+				zap.String("applicationID", applicationID),
+				zap.String("userID", userID.String()))
 		}
 	}
 
-	// Prepare result
+	/// Prepare result
 	result := &ApprovalResult{
 		ApplicationStatus:     application.Status,
 		IsFinalApprover:       groupMember.IsFinalApprover,
-		ReadyForFinalApproval: readyForFinalApproval,
+		ReadyForFinalApproval: assignment.ReadyForFinalApproval,
 		ApprovedCount:         assignment.ApprovedCount,
 		TotalMembers:          assignment.TotalMembers,
 		UnresolvedIssues:      assignment.IssuesRaised - assignment.IssuesResolved,
+	}
+
+	// If final approver just approved, update the ready status
+	if groupMember.IsFinalApprover {
+		result.ReadyForFinalApproval = assignment.AllRegularMembersApproved() &&
+			assignment.IssuesRaised == assignment.IssuesResolved
 	}
 
 	return result, nil
@@ -279,7 +304,17 @@ func (r *applicationRepository) ProcessApplicationRejection(
 		if err := tx.Create(&finalApproval).Error; err != nil {
 			return nil, err
 		}
+
+		// ← ADD THIS: Link the final decision back to the assignment
+		assignment.FinalDecisionID = &finalApproval.ID
 	}
+
+	// Update application status
+	application.Status = models.RejectedApplication
+	assignment.CompletedAt = &now
+
+	// Reset ready for final approval flag since it's being rejected
+	assignment.ReadyForFinalApproval = false
 
 	if err := tx.Save(&application).Error; err != nil {
 		return nil, err
@@ -301,12 +336,15 @@ func (r *applicationRepository) ProcessApplicationRejection(
 	return result, nil
 }
 
-
 // updateAssignmentStatistics updates the statistics for a group assignment
 func (r *applicationRepository) updateAssignmentStatistics(tx *gorm.DB, assignmentID uuid.UUID) error {
 	var assignment models.ApplicationGroupAssignment
 
-	// Count decisions by status
+	if err := tx.Where("id = ?", assignmentID).First(&assignment).Error; err != nil {
+		return fmt.Errorf("failed to find assignment: %w", err)
+	}
+
+	// Count decisions by status with better error handling
 	var stats struct {
 		ApprovedCount int64
 		RejectedCount int64
@@ -314,22 +352,21 @@ func (r *applicationRepository) updateAssignmentStatistics(tx *gorm.DB, assignme
 		TotalMembers  int64
 	}
 
-	// Get total active members in the group
+	// Get total active members
 	if err := tx.Model(&models.ApprovalGroupMember{}).
-		Where("approval_group_id = (SELECT approval_group_id FROM application_group_assignments WHERE id = ?)", assignmentID).
-		Where("is_active = ?", true).
+		Where("approval_group_id = ? AND is_active = ?", assignment.ApprovalGroupID, true).
 		Count(&stats.TotalMembers).Error; err != nil {
-		return err
+		return fmt.Errorf("failed to count members: %w", err)
 	}
 
-	// Count decisions by status
+	// Count ONLY NON-DELETED decisions (soft delete aware)
 	if err := tx.Model(&models.MemberApprovalDecision{}).
-		Where("assignment_id = ?", assignmentID).
+		Where("assignment_id = ? AND deleted_at IS NULL", assignmentID). // Only non-deleted decisions
 		Select("COUNT(CASE WHEN status = 'APPROVED' THEN 1 END) as approved_count, " +
 			"COUNT(CASE WHEN status = 'REJECTED' THEN 1 END) as rejected_count, " +
 			"COUNT(CASE WHEN status = 'PENDING' THEN 1 END) as pending_count").
 		Scan(&stats).Error; err != nil {
-		return err
+		return fmt.Errorf("failed to count decisions: %w", err)
 	}
 
 	// Count resolved issues
@@ -337,19 +374,19 @@ func (r *applicationRepository) updateAssignmentStatistics(tx *gorm.DB, assignme
 	if err := tx.Model(&models.ApplicationIssue{}).
 		Where("assignment_id = ? AND is_resolved = ?", assignmentID, true).
 		Count(&resolvedIssues).Error; err != nil {
-		return err
+		return fmt.Errorf("failed to count resolved issues: %w", err)
 	}
 
 	// Update assignment
-	if err := tx.Where("id = ?", assignmentID).First(&assignment).Error; err != nil {
-		return err
-	}
-
 	assignment.ApprovedCount = int(stats.ApprovedCount)
 	assignment.RejectedCount = int(stats.RejectedCount)
 	assignment.PendingCount = int(stats.PendingCount)
 	assignment.TotalMembers = int(stats.TotalMembers)
 	assignment.IssuesResolved = int(resolvedIssues)
 
-	return tx.Save(&assignment).Error
+	if err := tx.Save(&assignment).Error; err != nil {
+		return fmt.Errorf("failed to save assignment: %w", err)
+	}
+
+	return nil
 }

@@ -38,7 +38,7 @@ import (
 	document_services "town-planning-backend/documents/services"
 	// services
 
-	// "town-planning-backend/internal/bootstrap"
+	// seeds "town-planning-backend/seeds"
 
 	// WebSocket
 	"town-planning-backend/websocket"

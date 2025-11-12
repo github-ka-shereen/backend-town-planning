@@ -15,8 +15,8 @@ type WorkflowStatus struct {
 	PreviousStages      []string   `json:"previous_stages"`
 	NextStages          []string   `json:"next_stages"`
 	EstimatedCompletion *time.Time `json:"estimated_completion"`
-	TotalDepartments    int        `json:"total_departments"`
-	ApprovedDepartments int        `json:"approved_departments"`
+	TotalApprovers      int        `json:"total_approvers"`    // Changed from TotalDepartments
+	ApprovedApprovers   int        `json:"approved_approvers"` // Changed from ApprovedDepartments
 	ProgressPercentage  int        `json:"progress_percentage"`
 }
 
@@ -33,12 +33,13 @@ type ChatParticipantSummary struct {
 
 // Enhanced ApplicationApprovalData with all required fields
 type ApplicationApprovalData struct {
-	Application      *EnhancedApplicationView `json:"application"`
-	ApprovalProgress int                      `json:"approval_progress"`
-	CanTakeAction    bool                     `json:"can_take_action"`
-	UnresolvedIssues int                      `json:"unresolved_issues"`
-	Workflow         *WorkflowStatus          `json:"workflow"`
-	ChatThreadIDs    []uuid.UUID              `json:"chat_thread_ids,omitempty"` // Only IDs initially
+	Application           *EnhancedApplicationView `json:"application"`
+	ApprovalProgress      int                      `json:"approval_progress"`
+	CanTakeAction         bool                     `json:"can_take_action"`
+	UnresolvedIssues      int                      `json:"unresolved_issues"`
+	Workflow              *WorkflowStatus          `json:"workflow"`
+	ChatThreadIDs         []uuid.UUID              `json:"chat_thread_ids,omitempty"`
+	ReadyForFinalApproval bool                     `json:"ready_for_final_approval"` // ADD THIS
 }
 
 // EnhancedApplicationView includes all fields needed by frontend
@@ -466,13 +467,17 @@ func (r *applicationRepository) GetEnhancedApplicationApprovalData(applicationID
 	// Replace the application's issues with only accessible ones
 	application.Issues = accessibleIssues
 
+	readyForFinalApproval := r.isReadyForFinalApproval(&application, groupMembers)
+
 	response := &ApplicationApprovalData{
-		Application:      r.buildEnhancedApplicationView(&application, groupMembers, nil),
-		ApprovalProgress: r.calculateEnhancedApprovalProgress(&application, groupMembers),
-		UnresolvedIssues: r.countUnresolvedIssues(application.Issues),
-		CanTakeAction:    r.canTakeAction(&application),
-		Workflow:         r.getEnhancedWorkflowStatus(&application, groupMembers),
-		ChatThreadIDs:    accessibleThreadIDs,
+		Application:           r.buildEnhancedApplicationView(&application, groupMembers, nil),
+		ApprovalProgress:      r.calculateEnhancedApprovalProgress(&application, groupMembers),
+		UnresolvedIssues:      r.countUnresolvedIssues(application.Issues),
+		CanTakeAction:         r.canTakeAction(&application),
+		Workflow:              r.getEnhancedWorkflowStatus(&application, groupMembers),
+		ChatThreadIDs:         accessibleThreadIDs,
+		ReadyForFinalApproval: readyForFinalApproval, // ADD THIS
+
 	}
 
 	return response, nil
@@ -834,97 +839,6 @@ func (r *applicationRepository) buildPaymentSummary(payment *models.Payment) *Pa
 	}
 }
 
-// Build enhanced chat threads
-func (r *applicationRepository) buildEnhancedChatThreads(
-	threads []models.ChatThread,
-	messageCounts map[uuid.UUID]int,
-) []*EnhancedChatThread {
-	result := make([]*EnhancedChatThread, len(threads))
-	for i, thread := range threads {
-		// Build participants
-		participants := make([]*ChatParticipantSummary, len(thread.Participants))
-		for j, participant := range thread.Participants {
-			participants[j] = &ChatParticipantSummary{
-				ID:        participant.User.ID,
-				FirstName: participant.User.FirstName,
-				LastName:  participant.User.LastName,
-				Email:     participant.User.Email,
-				Role:      string(participant.Role),
-			}
-		}
-
-		// Build messages (reverse to show in chronological order)
-		messages := make([]*EnhancedChatMessage, len(thread.Messages))
-		for k, message := range thread.Messages {
-			// Build attachments
-			attachments := make([]*ChatAttachmentSummary, len(message.Attachments))
-			for l, attachment := range message.Attachments {
-				attachments[l] = &ChatAttachmentSummary{
-					ID:        attachment.ID,
-					FileName:  attachment.Document.FileName,
-					FileSize:  attachment.Document.FileSize.String(),
-					FileType:  string(attachment.Document.DocumentType),
-					MimeType:  attachment.Document.MimeType,
-					FilePath:  attachment.Document.FilePath,
-					CreatedAt: attachment.Document.CreatedAt.Format(time.RFC3339),
-				}
-			}
-
-			messages[len(thread.Messages)-1-k] = &EnhancedChatMessage{
-				ID:          message.ID,
-				Content:     message.Content,
-				MessageType: message.MessageType,
-				Status:      message.Status,
-				IsEdited:    message.IsEdited,
-				EditedAt:    utils.FormatTimePointer(message.EditedAt),
-				IsDeleted:   message.IsDeleted,
-				CreatedAt:   message.CreatedAt.Format(time.RFC3339),
-				Sender: &UserSummary{
-					ID:        message.Sender.ID,
-					FirstName: message.Sender.FirstName,
-					LastName:  message.Sender.LastName,
-					Email:     message.Sender.Email,
-					Department: utils.DerefString(func() *string {
-						if message.Sender.Department != nil {
-							return &message.Sender.Department.Name
-						}
-						return nil
-					}()),
-					RoleName: utils.DerefString(func() *string {
-						if &message.Sender.Role != nil {
-							return &message.Sender.Role.Name
-						}
-						return nil
-					}()),
-				},
-				ParentID:    message.ParentID,
-				Attachments: attachments,
-			}
-		}
-
-		totalCount := messageCounts[thread.ID]
-		hasMore := totalCount > len(messages)
-
-		result[i] = &EnhancedChatThread{
-			ID:           thread.ID,
-			Title:        thread.Title,
-			ThreadType:   thread.ThreadType,
-			Description:  thread.Description,
-			IsActive:     thread.IsActive,
-			IsResolved:   thread.IsResolved,
-			CreatedAt:    thread.CreatedAt.Format(time.RFC3339),
-			ResolvedAt:   utils.FormatTimePointer(thread.ResolvedAt),
-			Participants: participants,
-			Messages:     messages,
-			HasMore:      hasMore,
-			TotalCount:   totalCount,
-		}
-	}
-	return result
-}
-
-// repositories/application_repository.go
-
 // Count unresolved issues
 func (r *applicationRepository) countUnresolvedIssues(issues []models.ApplicationIssue) int {
 	count := 0
@@ -952,69 +866,141 @@ func (r *applicationRepository) calculateEnhancedApprovalProgress(
 		return 0
 	}
 
-	// Count only regular members (non-final approvers)
-	regularMemberCount := 0
+	// Count ALL members (including final approver)
+	totalMemberCount := 0
 	approvedCount := 0
 
 	for _, member := range members {
-		if !member.IsFinalApprover && member.IsActive {
-			regularMemberCount++
-			// Check if this member has approved in any assignment
+		if member.IsActive && member.CanApprove {
+			totalMemberCount++
+
+			memberApproved := false
 			for _, assignment := range app.GroupAssignments {
 				for _, decision := range assignment.Decisions {
 					if decision.MemberID == member.ID && decision.Status == models.DecisionApproved {
-						approvedCount++
+						memberApproved = true
 						break
 					}
 				}
+				if memberApproved {
+					break
+				}
+			}
+
+			if memberApproved {
+				approvedCount++
 			}
 		}
 	}
 
-	if regularMemberCount == 0 {
+	if totalMemberCount == 0 {
 		return 0
 	}
 
-	return (approvedCount * 100) / regularMemberCount
+	progress := float64(approvedCount) / float64(totalMemberCount) * 100
+	return int(progress + 0.5)
 }
 
 // Get enhanced workflow status
+// Get enhanced workflow status - MEMBER BASED
 func (r *applicationRepository) getEnhancedWorkflowStatus(
 	app *models.Application,
 	members []models.ApprovalGroupMember,
 ) *WorkflowStatus {
-	// Count unique departments
-	departmentMap := make(map[uuid.UUID]bool)
-	approvedDepartments := make(map[uuid.UUID]bool)
+	// Count ALL active members who can approve (including final approver)
+	totalApprovers := 0
+	approvedApprovers := 0
 
 	for _, member := range members {
-		if member.User.Department != nil && member.User.Department.ID != uuid.Nil {
-			departmentMap[member.User.Department.ID] = true
+		if member.IsActive && member.CanApprove {
+			totalApprovers++
 
-			// Check if this department has approved
+			// Check if this member has approved
+			memberApproved := false
 			for _, assignment := range app.GroupAssignments {
 				for _, decision := range assignment.Decisions {
-					if decision.MemberID == member.ID &&
-						decision.Status == models.DecisionApproved {
-						approvedDepartments[member.User.Department.ID] = true
+					if decision.MemberID == member.ID && decision.Status == models.DecisionApproved {
+						memberApproved = true
 						break
 					}
 				}
+				if memberApproved {
+					break
+				}
+			}
+
+			if memberApproved {
+				approvedApprovers++
 			}
 		}
 	}
 
-	totalDepartments := len(departmentMap)
-	approvedCount := len(approvedDepartments)
-
 	var progressPercentage int
-	if totalDepartments > 0 {
-		progressPercentage = (approvedCount * 100) / totalDepartments
+	if totalApprovers > 0 {
+		progressPercentage = (approvedApprovers * 100) / totalApprovers
 	}
 
 	return &WorkflowStatus{
-		TotalDepartments:    totalDepartments,
-		ApprovedDepartments: approvedCount,
-		ProgressPercentage:  progressPercentage,
+		TotalApprovers:     totalApprovers,
+		ApprovedApprovers:  approvedApprovers,
+		ProgressPercentage: progressPercentage,
 	}
+}
+
+// Check if application is ready for final approval
+func (r *applicationRepository) isReadyForFinalApproval(
+	app *models.Application,
+	members []models.ApprovalGroupMember,
+) bool {
+	// If there are no active assignments, not ready
+	if len(app.GroupAssignments) == 0 {
+		return false
+	}
+
+	assignment := app.GroupAssignments[0]
+
+	// Count regular members and their approvals
+	regularMemberCount := 0
+	regularApprovedCount := 0
+	hasFinalApprover := false
+
+	for _, member := range members {
+		if member.IsActive && member.CanApprove {
+			if member.IsFinalApprover {
+				hasFinalApprover = true
+				continue // Skip final approver for regular member count
+			}
+
+			regularMemberCount++
+
+			// Check if this regular member has approved
+			memberApproved := false
+			for _, decision := range assignment.Decisions {
+				if decision.MemberID == member.ID && decision.Status == models.DecisionApproved {
+					memberApproved = true
+					break
+				}
+			}
+
+			if memberApproved {
+				regularApprovedCount++
+			}
+		}
+	}
+
+	// Ready if:
+	// 1. There is a final approver
+	// 2. All regular members have approved (or met minimum requirements)
+	// 3. No unresolved issues
+	// 4. Application is still in review (not already approved/rejected)
+
+	allRegularMembersApproved := regularMemberCount > 0 && regularApprovedCount == regularMemberCount
+	noUnresolvedIssues := assignment.IssuesRaised == assignment.IssuesResolved
+	isInReviewState := app.Status == models.UnderReviewApplication ||
+		app.Status == models.PendingApprovalApplication
+
+	return hasFinalApprover &&
+		allRegularMembersApproved &&
+		noUnresolvedIssues &&
+		isInReviewState
 }

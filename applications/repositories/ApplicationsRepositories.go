@@ -78,6 +78,7 @@ type ApplicationRepository interface {
 	AddMultipleParticipantsToThread(tx *gorm.DB, threadID uuid.UUID, participants []requests.ParticipantRequest, addedBy *models.User) ([]models.ChatParticipant, error)
 	RemoveParticipantFromThread(tx *gorm.DB, threadID uuid.UUID, userID uuid.UUID, removedBy *models.User) error
 	RemoveMultipleParticipantsFromThread(tx *gorm.DB, threadID uuid.UUID, userIDs []uuid.UUID, userRemoving *models.User) (int, error)
+	ProcessDecisionRevocation(tx *gorm.DB, applicationID string, userID uuid.UUID, reason string) (*requests.RevokeDecisionResponse, error)
 }
 
 type applicationRepository struct {

@@ -160,7 +160,7 @@ type ApplicationGroupAssignment struct {
 
 	// Progress tracking
 	TotalMembers     int `gorm:"default:0" json:"total_members"`
-	AvailableMembers int `gorm:"default:0" json:"available_members"` // Active and available members
+	AvailableMembers int `gorm:"default:0" json:"available_members"`
 	ApprovedCount    int `gorm:"default:0" json:"approved_count"`
 	RejectedCount    int `gorm:"default:0" json:"rejected_count"`
 	PendingCount     int `gorm:"default:0" json:"pending_count"`
@@ -171,6 +171,7 @@ type ApplicationGroupAssignment struct {
 	ReadyForFinalApproval   bool       `gorm:"default:false" json:"ready_for_final_approval"`
 	FinalApproverAssignedAt *time.Time `json:"final_approver_assigned_at"`
 	FinalDecisionAt         *time.Time `json:"final_decision_at"`
+	FinalDecisionID         *uuid.UUID `gorm:"type:uuid;index" json:"final_decision_id"` // ← ADD THIS
 
 	// Backup assignment tracking
 	UsedBackupMembers bool `gorm:"default:false" json:"used_backup_members"`
@@ -179,7 +180,7 @@ type ApplicationGroupAssignment struct {
 	Application   Application              `gorm:"foreignKey:ApplicationID" json:"application"`
 	Group         ApprovalGroup            `gorm:"foreignKey:ApprovalGroupID" json:"group"`
 	Decisions     []MemberApprovalDecision `gorm:"foreignKey:AssignmentID" json:"decisions,omitempty"`
-	FinalDecision *FinalApproval           `gorm:"foreignKey:ApplicationID" json:"final_decision,omitempty"`
+	FinalDecision *FinalApproval           `gorm:"foreignKey:FinalDecisionID" json:"final_decision,omitempty"` // ← FIX THIS
 
 	// Audit fields
 	AssignedBy string         `gorm:"not null" json:"assigned_by"`
@@ -317,6 +318,7 @@ type ApplicationIssue struct {
 type FinalApproval struct {
 	ID            uuid.UUID `gorm:"type:uuid;primary_key;" json:"id"`
 	ApplicationID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex" json:"application_id"`
+	// AssignmentID  *uuid.UUID `gorm:"type:uuid;index" json:"assignment_id"` // ← REMOVE THIS LINE
 	ApproverID    uuid.UUID `gorm:"type:uuid;not null;index" json:"approver_id"`
 
 	// Final decision
@@ -330,6 +332,7 @@ type FinalApproval struct {
 
 	// Relationships
 	Application Application `gorm:"foreignKey:ApplicationID" json:"application"`
+	// Assignment  *ApplicationGroupAssignment `gorm:"foreignKey:AssignmentID" json:"assignment,omitempty"` // ← REMOVE THIS LINE
 	Approver    User        `gorm:"foreignKey:ApproverID" json:"approver"`
 
 	// Audit fields
@@ -370,6 +373,33 @@ type Comment struct {
 	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// DecisionRevocation tracks when a decision is revoked
+type DecisionRevocation struct {
+	ID             uuid.UUID            `gorm:"type:uuid;primary_key;" json:"id"`
+	DecisionID     uuid.UUID            `gorm:"type:uuid;not null;index" json:"decision_id"`
+	RevokedBy      uuid.UUID            `gorm:"type:uuid;not null" json:"revoked_by"`
+	Reason         string               `gorm:"type:text;not null" json:"reason"`
+	RevokedAt      time.Time            `gorm:"not null" json:"revoked_at"`
+	PreviousStatus MemberDecisionStatus `gorm:"type:varchar(20)" json:"previous_status"`
+
+	// Relationships
+	Decision MemberApprovalDecision `gorm:"foreignKey:DecisionID" json:"decision"`
+	Revoker  User                   `gorm:"foreignKey:RevokedBy" json:"revoker"`
+
+	// Audit fields
+	CreatedAt time.Time      `gorm:"autoCreateTime" json:"created_at"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// BeforeCreate hook
+func (dr *DecisionRevocation) BeforeCreate(tx *gorm.DB) error {
+	if dr.ID == uuid.Nil {
+		dr.ID = uuid.New()
+	}
+	return nil
 }
 
 // BeforeCreate hooks

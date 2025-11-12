@@ -63,11 +63,6 @@ func ApplicationRouterInit(
 	applicationRoutes.Patch("/applications/:id/collection", applicationController.MarkApplicationCollectedController)
 	applicationRoutes.Patch("/applications/:id/document-flags", applicationController.UpdateDocumentFlagsController)
 
-	// Application Documents
-	// applicationRoutes.Get("/applications/:id/documents", applicationController.GetApplicationDocumentsController)
-	// applicationRoutes.Post("/applications/:id/documents", applicationController.UploadApplicationDocumentController)
-	// applicationRoutes.Delete("/applications/:id/documents/:documentId", applicationController.DeleteApplicationDocumentController)
-
 	// Application Actions (MUST come before generic :id routes)
 	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
@@ -78,6 +73,10 @@ func ApplicationRouterInit(
 	// Approval Workflow - Use POST for actions that change state
 	applicationRoutes.Post("/applications/:id/approve", applicationController.ApproveRejectApplicationController)
 	applicationRoutes.Post("/applications/:id/reject", applicationController.RejectApplicationController)
+	
+	// ADD REVOKE ENDPOINT HERE
+	applicationRoutes.Post("/applications/:id/revoke", applicationController.RevokeDecisionController)
+	
 	applicationRoutes.Post("/applications/:id/raise-issue", applicationController.RaiseIssueController)
 	applicationRoutes.Post("/issues/:id/resolve", applicationController.ResolveIssueController)
 	applicationRoutes.Post("/issues/:id/reopen", applicationController.ReopenIssueController)

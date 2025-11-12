@@ -61,6 +61,7 @@ var allModels = []interface{}{
 	&models.ApplicationIssue{}, // MUST come BEFORE ChatThread
 	&models.FinalApproval{},
 	&models.Comment{},
+	&models.DecisionRevocation{},
 
 	// 9. NEW: Chat System Models (MUST come after ApplicationIssue)
 	&models.ChatThread{},      // References ApplicationIssue
