@@ -67,6 +67,9 @@ func ApplicationRouterInit(
 	applicationRoutes.Post("/generate-tpd-1-form/:id", applicationController.GenerateTPD1FormController)
 	applicationRoutes.Get("/application-approval-data/:id", applicationController.GetApplicationApprovalDataController)
 
+	// Generate Comments Sheet
+	applicationRoutes.Post("/generate-comments-sheet/:id", applicationController.GenerateCommentsSheetController)
+
 	// Chat Messages - ADDED THIS ROUTE
 	applicationRoutes.Get("/chat/threads/:threadId/messages", applicationController.GetChatMessagesController)
 

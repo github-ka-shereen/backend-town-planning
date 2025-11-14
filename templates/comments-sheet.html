@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @page {
+        size: A4 landscape;
+        margin: 10mm;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 9pt;
+        color: #000;
+        line-height: 1.2;
+      }
+
+      /* Header Section */
+      .header-container {
+        display: grid;
+        grid-template-columns: 180pt 1fr 180pt;
+        align-items: start;
+        margin-bottom: 8pt;
+        gap: 10pt;
+      }
+
+      .header-left {
+        font-size: 8pt;
+        line-height: 1.4;
+      }
+
+      .header-center {
+        text-align: center;
+      }
+
+      .logo {
+        width: 50pt;
+        height: 50pt;
+        margin: 0 auto 4pt;
+      }
+
+      .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .municipality-name {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 11pt;
+        margin-bottom: 3pt;
+      }
+
+      .header-right {
+        text-align: right;
+        font-size: 8pt;
+        line-height: 1.4;
+      }
+
+      /* Title Section */
+      .title-section {
+        background-color: #d9d9d9;
+        padding: 4pt 8pt;
+        margin: 8pt 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border: 1px solid #000;
+      }
+
+      .title-left {
+        font-weight: bold;
+        font-size: 10pt;
+        text-transform: uppercase;
+      }
+
+      .title-right {
+        font-weight: bold;
+        font-size: 10pt;
+        text-transform: uppercase;
+      }
+
+      /* Info Grid */
+      .info-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 6pt;
+        margin: 8pt 0;
+        font-size: 7.5pt;
+      }
+
+      .info-item {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .info-label {
+        font-weight: bold;
+        margin-bottom: 2pt;
+      }
+
+      .info-value {
+        border: 1px solid #000;
+        padding: 2pt 4pt;
+        min-height: 18pt;
+        background-color: #fff;
+      }
+
+      /* Comments Table */
+      .comments-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8pt 0;
+        font-size: 8pt;
+      }
+
+      .comments-table th,
+      .comments-table td {
+        border: 1px solid #000;
+        padding: 4pt 6pt;
+        text-align: left;
+        vertical-align: top;
+      }
+
+      .comments-table th {
+        background-color: #d9d9d9;
+        font-weight: bold;
+        text-transform: uppercase;
+      }
+
+      .comments-table .section-col {
+        width: 120pt;
+      }
+
+      .comments-table .date-col {
+        width: 80pt;
+      }
+
+      .comments-table .status-col {
+        width: 70pt;
+        text-align: center;
+      }
+
+      .comments-table .by-col {
+        width: 80pt;
+      }
+
+      .comments-table .comment-col {
+        width: auto;
+      }
+
+      .comments-table .signature-col {
+        width: 100pt;
+        text-align: center;
+      }
+
+      /* Status styling */
+      .status-approved {
+        color: #006400;
+        font-weight: bold;
+      }
+
+      .status-rejected {
+        color: #8b0000;
+        font-weight: bold;
+      }
+
+      .status-pending {
+        color: #ff8c00;
+        font-weight: bold;
+      }
+
+      /* Signature styling */
+      .signature-img {
+        max-width: 80pt;
+        max-height: 30pt;
+        object-fit: contain;
+      }
+
+      .signature-line {
+        border-top: 1px solid #000;
+        margin-top: 25pt;
+        padding-top: 2pt;
+        font-size: 7pt;
+        text-align: center;
+      }
+
+      /* Footer Section */
+      .footer-section {
+        margin-top: 12pt;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding-top: 8pt;
+        border-top: 2px solid #000;
+      }
+
+      .approval-status {
+        font-size: 9pt;
+      }
+
+      .approval-label {
+        font-weight: bold;
+        margin-right: 8pt;
+      }
+
+      .approval-value {
+        display: inline-block;
+        min-width: 100pt;
+        border-bottom: 1px solid #000;
+        padding: 2pt 6pt;
+      }
+
+      .signature-box {
+        text-align: center;
+      }
+
+      .signature-title {
+        font-weight: bold;
+        font-size: 8pt;
+        margin-bottom: 2pt;
+      }
+
+      .end-marker {
+        text-align: center;
+        margin-top: 8pt;
+        font-size: 8pt;
+        font-weight: bold;
+      }
+
+      .page-info {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 6pt;
+        font-size: 7pt;
+      }
+
+      /* Row styling */
+      .comments-table tbody tr:nth-child(even) {
+        background-color: #f9f9f9;
+      }
+
+      .comments-table tbody tr:hover {
+        background-color: #f0f0f0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="header-container">
+      <div class="header-left">
+        CITY OF VICTORIA FALLS<br />
+        P O BOX 41<br />
+        VICTORIA FALLS
+      </div>
+
+      <div class="header-center">
+        <div class="logo">
+          <img src="/logo" alt="Municipality Logo" />
+        </div>
+        <div class="municipality-name">CITY OF VICTORIA FALLS</div>
+      </div>
+
+      <div class="header-right">
+        Tel: +263-83-284 4311, +263-83-284 4210<br />
+        +263-83-284 3531-3<br />
+        Fax: +263-83-284 4308/40253<br />
+        E-mail:cityplanning@vfm.co.zw<br />
+        Website: www.vfcc.co.zw
+      </div>
+    </div>
+
+    <!-- Title Bar -->
+    <div class="title-section">
+      <div class="title-left">TOWN PLANNING DEPARTMENT</div>
+      <div class="title-right">PLAN COMMENTS SHEET</div>
+    </div>
+
+    <!-- Application Info Grid -->
+    <div class="info-grid">
+      <div class="info-item">
+        <div class="info-label">PLANNo.:</div>
+        <div class="info-value">{{.PlanNumber}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">NAME OF DEVELOPER:</div>
+        <div class="info-value">{{.DeveloperName}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">STANDNo.:</div>
+        <div class="info-value">{{.StandNumber}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">DEVELOPMENT PERMIT No.:</div>
+        <div class="info-value">{{.DevelopmentPermitNo}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">DATE SUBMITTED:</div>
+        <div class="info-value">{{.DateSubmitted}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">STAND USE</div>
+        <div class="info-value">{{.StandUse}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">VALUE SUBMITTED:</div>
+        <div class="info-value">{{.ValueSubmitted}}</div>
+      </div>
+      <div class="info-item">
+        <div class="info-label">DEVELOPMENT FEE:</div>
+        <div class="info-value">{{.DevelopmentFee}}</div>
+      </div>
+      <div class="info-item" style="grid-column: 1 / -1">
+        <div class="info-label">LOCATION:</div>
+        <div class="info-value">{{.Location}}</div>
+      </div>
+    </div>
+
+    <!-- Comments Table -->
+    <table class="comments-table">
+      <thead>
+        <tr>
+          <th class="section-col">SECTION</th>
+          <th class="date-col">Date</th>
+          <th class="status-col">Status</th>
+          <th class="by-col">By</th>
+          <th class="comment-col">Comment</th>
+          <th class="signature-col">OFFICIAL'S SIGNATURE</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{range $index, $comment := .Comments}}
+        <tr>
+          <td class="section-col"><strong>{{.SectionName}}</strong></td>
+          <td class="date-col">{{.Date}}</td>
+          <td class="status-col">
+            {{if eq .Status "APPROVED"}}
+            <span class="status-approved">{{.StatusFormatted}}</span>
+            {{else if eq .Status "REJECTED"}}
+            <span class="status-rejected">{{.StatusFormatted}}</span>
+            {{else}}
+            <span class="status-pending">{{.StatusFormatted}}</span>
+            {{end}}
+          </td>
+          <td class="by-col">{{.ReviewerName}}</td>
+          <td class="comment-col">{{.Comment}}</td>
+          <td class="signature-col">
+            {{if .HasSignature}}
+              {{if .SignatureBase64}}
+              <img src="/signature/{{$index}}" alt="Signature" class="signature-img" />
+              {{else}}
+              <div class="signature-line">OFFICIAL'S SIGNATURE</div>
+              {{end}}
+            {{end}}
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+
+    <!-- Footer with Approval Status -->
+    <div class="footer-section">
+      <div class="approval-status">
+        <span class="approval-label">APPROVAL STATUS:</span>
+        <span class="approval-value">{{.ApprovalStatus}}</span>
+
+        {{if ne .DateApproved ""}}
+        <span class="approval-label" style="margin-left: 20pt">DATE APPROVED:</span>
+        <span class="approval-value">{{.DateApproved}}</span>
+        {{end}}
+      </div>
+
+      <div class="signature-box">
+        <div class="signature-title">TOWN ENGINEER</div>
+        <div class="signature-title">SIGNATURE:</div>
+        <div style="width: 150pt; border-top: 1px solid #000; margin-top: 30pt"></div>
+      </div>
+    </div>
+
+    <!-- End Marker -->
+    <div class="end-marker">
+      ****************** End Of Report ******************
+    </div>
+
+    <!-- Page Info -->
+    <div class="page-info">
+      <div>Date Printed: {{.PrintDate}}</div>
+      <div>Page 1 of 1</div>
+    </div>
+  </body>
+</html>

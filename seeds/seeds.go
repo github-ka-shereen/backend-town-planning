@@ -301,6 +301,7 @@ func SeedTownPlanningDocumentCategories(db *gorm.DB) error {
 		{ID: uuid.New(), Name: "Initial Building Plan", Code: "INITIAL_PLAN", Description: "Initial architectural building plans", IsSystem: true, CreatedBy: createdBy},
 		{ID: uuid.New(), Name: "Site Plan", Code: "SITE_PLAN", Description: "Property site and layout plans", IsSystem: true, CreatedBy: createdBy},
 		{ID: uuid.New(), Name: "Building Plan", Code: "BUILDING_PLAN", Description: "Detailed architectural building plans", IsSystem: true, CreatedBy: createdBy},
+		{ID: uuid.New(), Name: "Plan Comments Sheet", Code: "PLAN_COMMENTS_SHEET", Description: "Comments sheet for development plans", IsSystem: true, CreatedBy: createdBy},
 
 		// Engineering and Structural Documents
 		{ID: uuid.New(), Name: "Structural Engineering Certificate", Code: "ENGINEERING_CERTIFICATE", Description: "Structural engineering certificates", IsSystem: true, CreatedBy: createdBy},

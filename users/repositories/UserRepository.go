@@ -195,7 +195,7 @@ func (r *userRepository) CreateUser(user *models.User) (*models.User, error) {
 
 func (r *userRepository) GetUserByID(id string) (*models.User, error) {
 	var user models.User
-	err := r.db.First(&user, "id = ?", id).Error
+	err := r.db.Preload("Role").Preload("Department").First(&user, "id = ?", id).Error
 	if user.Active == false || user.IsSuspended {
 		return nil, fmt.Errorf("user account is disabled")
 	}
@@ -204,7 +204,7 @@ func (r *userRepository) GetUserByID(id string) (*models.User, error) {
 
 func (r *userRepository) GetUserByPhoneNumber(phone string) (*models.User, error) {
 	var user models.User
-	err := r.db.First(&user, "phone = ?", phone).Error
+	err := r.db.Preload("Role").Preload("Department").First(&user, "phone = ?", phone).Error
 	return &user, err
 }
 
