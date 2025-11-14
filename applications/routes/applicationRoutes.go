@@ -70,6 +70,9 @@ func ApplicationRouterInit(
 	// Generate Comments Sheet
 	applicationRoutes.Post("/generate-comments-sheet/:id", applicationController.GenerateCommentsSheetController)
 
+	// Generate Development Permit
+	applicationRoutes.Post("/generate-development-permit/:id", applicationController.GenerateDevelopmentPermitController)
+
 	// Chat Messages - ADDED THIS ROUTE
 	applicationRoutes.Get("/chat/threads/:threadId/messages", applicationController.GetChatMessagesController)
 

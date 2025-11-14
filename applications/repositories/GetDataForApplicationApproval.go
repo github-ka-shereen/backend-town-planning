@@ -908,144 +908,148 @@ func (r *applicationRepository) calculateEnhancedApprovalProgress(
 
 // Get enhanced workflow status
 func (r *applicationRepository) getEnhancedWorkflowStatus(
-    app *models.Application,
-    members []models.ApprovalGroupMember,
+	app *models.Application,
+	members []models.ApprovalGroupMember,
 ) *WorkflowStatus {
-    // Separate counters for regular vs final approvers
-    regularApprovers := 0
-    regularApproved := 0
-    regularRejected := 0
-    regularPending := 0
-    
-    var finalApprover *models.ApprovalGroupMember
-    finalApproverDecided := false
+	// Counters for all approver types
+	totalApprovers := 0
+	approvedApprovers := 0
+	rejectedApprovers := 0
+	pendingApprovers := 0
 
-    for _, member := range members {
-        if member.IsActive && member.CanApprove {
-            if member.IsFinalApprover {
-                finalApprover = &member
-                // Check if final approver decided
-                for _, assignment := range app.GroupAssignments {
-                    for _, decision := range assignment.Decisions {
-                        if decision.MemberID == member.ID && 
-                           decision.Status != models.DecisionPending {
-                            finalApproverDecided = true
-                            break
-                        }
-                    }
-                }
-            } else {
-                regularApprovers++
-                decided := false
-                
-                for _, assignment := range app.GroupAssignments {
-                    for _, decision := range assignment.Decisions {
-                        if decision.MemberID == member.ID {
-                            switch decision.Status {
-                            case models.DecisionApproved:
-                                decided = true
-                                regularApproved++
-                            case models.DecisionRejected:
-                                decided = true
-                                regularRejected++
-                            }
-                            break
-                        }
-                    }
-                    if decided {
-                        break
-                    }
-                }
-                
-                if !decided {
-                    regularPending++
-                }
-            }
-        }
-    }
+	var finalApprover *models.ApprovalGroupMember
 
-    // Calculate progress including final approver if applicable
-    totalDeciders := regularApprovers
-    if finalApprover != nil {
-        totalDeciders++ // Final approver also counts toward total
-    }
-    
-    decidedCount := regularApproved + regularRejected
-    if finalApproverDecided {
-        decidedCount++
-    }
-    
-    progressPercentage := 0
-    if totalDeciders > 0 {
-        progressPercentage = (decidedCount * 100) / totalDeciders
-    }
+	for _, member := range members {
+		if member.IsActive && member.CanApprove {
+			totalApprovers++
 
-    // Auto-rejection only applies when all REGULAR members decided + has rejection
-    shouldAutoReject := regularApprovers > 0 && 
-                       (regularApproved + regularRejected) == regularApprovers &&
-                       regularRejected > 0
+			if member.IsFinalApprover {
+				finalApprover = &member
+			}
 
-    return &WorkflowStatus{
-        TotalApprovers:      totalDeciders,
-        ApprovedApprovers:   regularApproved, // Only regular for now
-        RejectedApprovers:   regularRejected,
-        PendingApprovers:    regularPending + boolToInt(finalApprover != nil && !finalApproverDecided),
-        ProgressPercentage:  progressPercentage,
-        ShouldAutoReject:    shouldAutoReject,
-    }
+			// Check if this member has made a decision
+			memberDecided := false
+
+			for _, assignment := range app.GroupAssignments {
+				for _, decision := range assignment.Decisions {
+					if decision.MemberID == member.ID {
+						switch decision.Status {
+						case models.DecisionApproved:
+							memberDecided = true
+							approvedApprovers++
+						case models.DecisionRejected:
+							memberDecided = true
+							rejectedApprovers++
+						}
+						break
+					}
+				}
+				if memberDecided {
+					break
+				}
+			}
+
+			if !memberDecided {
+				pendingApprovers++
+			}
+		}
+	}
+
+	// Calculate progress
+	progressPercentage := 0
+	if totalApprovers > 0 {
+		decidedCount := approvedApprovers + rejectedApprovers
+		progressPercentage = (decidedCount * 100) / totalApprovers
+	}
+
+	// Auto-rejection logic (only for regular members, before final approver)
+	regularMembersCount := 0
+	regularRejectedCount := 0
+	if finalApprover != nil {
+		regularMembersCount = totalApprovers - 1 // exclude final approver
+		// Count regular member rejections
+		for _, member := range members {
+			if member.IsActive && member.CanApprove && !member.IsFinalApprover {
+				for _, assignment := range app.GroupAssignments {
+					for _, decision := range assignment.Decisions {
+						if decision.MemberID == member.ID && decision.Status == models.DecisionRejected {
+							regularRejectedCount++
+							break
+						}
+					}
+				}
+			}
+		}
+	} else {
+		regularMembersCount = totalApprovers
+		regularRejectedCount = rejectedApprovers
+	}
+
+	shouldAutoReject := regularMembersCount > 0 &&
+		(approvedApprovers+rejectedApprovers) == regularMembersCount &&
+		regularRejectedCount > 0
+
+	return &WorkflowStatus{
+		TotalApprovers:     totalApprovers,
+		ApprovedApprovers:  approvedApprovers, // Now includes final approver if they approved
+		RejectedApprovers:  rejectedApprovers,
+		PendingApprovers:   pendingApprovers,
+		ProgressPercentage: progressPercentage,
+		ShouldAutoReject:   shouldAutoReject,
+	}
 }
 
 func boolToInt(b bool) int {
-    if b {
-        return 1
-    }
-    return 0
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // Check if application is ready for final approval - UPDATED FOR REJECTIONS
 func (r *applicationRepository) isReadyForFinalApproval(
-    app *models.Application,
-    members []models.ApprovalGroupMember,
+	app *models.Application,
+	members []models.ApprovalGroupMember,
 ) bool {
-    if len(app.GroupAssignments) == 0 {
-        return false
-    }
+	if len(app.GroupAssignments) == 0 {
+		return false
+	}
 
-    assignment := app.GroupAssignments[0]
-    
-    // Check basic conditions
-    noUnresolvedIssues := assignment.IssuesRaised == assignment.IssuesResolved
-    isInReviewState := app.Status == models.UnderReviewApplication
-    
-    if !noUnresolvedIssues || !isInReviewState {
-        return false
-    }
+	assignment := app.GroupAssignments[0]
 
-    // Count regular member decisions
-    regularMembers := 0
-    regularDecided := 0
-    hasRejections := false
+	// Check basic conditions
+	noUnresolvedIssues := assignment.IssuesRaised == assignment.IssuesResolved
+	isInReviewState := app.Status == models.UnderReviewApplication
 
-    for _, member := range members {
-        if member.IsActive && member.CanApprove && !member.IsFinalApprover {
-            regularMembers++
-            
-            for _, decision := range assignment.Decisions {
-                if decision.MemberID == member.ID {
-                    if decision.Status != models.DecisionPending {
-                        regularDecided++
-                    }
-                    if decision.Status == models.DecisionRejected {
-                        hasRejections = true
-                    }
-                    break
-                }
-            }
-        }
-    }
+	if !noUnresolvedIssues || !isInReviewState {
+		return false
+	}
 
-    // Ready if all regular members decided AND no rejections
-    return regularMembers > 0 && 
-           regularDecided == regularMembers && 
-           !hasRejections
+	// Count regular member decisions
+	regularMembers := 0
+	regularDecided := 0
+	hasRejections := false
+
+	for _, member := range members {
+		if member.IsActive && member.CanApprove && !member.IsFinalApprover {
+			regularMembers++
+
+			for _, decision := range assignment.Decisions {
+				if decision.MemberID == member.ID {
+					if decision.Status != models.DecisionPending {
+						regularDecided++
+					}
+					if decision.Status == models.DecisionRejected {
+						hasRejections = true
+					}
+					break
+				}
+			}
+		}
+	}
+
+	// Ready if all regular members decided AND no rejections
+	return regularMembers > 0 &&
+		regularDecided == regularMembers &&
+		!hasRejections
 }

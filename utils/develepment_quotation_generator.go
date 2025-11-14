@@ -18,7 +18,6 @@ import (
 
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
-	"github.com/shopspring/decimal"
 	"go.uber.org/zap"
 )
 
@@ -87,15 +86,15 @@ func prepareQuotationData(application models.Application) (QuotationData, error)
 		PermitType:          getPermitType(application),
 		DevelopmentType:     getDevelopmentType(application),
 		PrintDate:           time.Now().Format("02/01/2006"),
-		PlanArea:            formatCurrency(*application.PlanArea),
-		PricePerSquareMeter: formatCurrency(application.Tariff.PricePerSquareMeter),
-		EstimatedCost:       formatCurrency(*application.EstimatedCost),
-		PermitFee:           formatCurrency(application.Tariff.PermitFee),
+		PlanArea:            formatCurrency(*application.PlanArea, application.Tariff.Currency),
+		PricePerSquareMeter: formatCurrency(application.Tariff.PricePerSquareMeter, application.Tariff.Currency),
+		EstimatedCost:       formatCurrency(*application.EstimatedCost, application.Tariff.Currency),
+		PermitFee:           formatCurrency(application.Tariff.PermitFee, application.Tariff.Currency),
 		Currency:            application.Tariff.Currency,
-		InspectionFee:       formatCurrency(application.Tariff.InspectionFee),
-		DevelopmentFee:      formatCurrency(*application.DevelopmentLevy),
-		VATAmount:           formatCurrency(*application.VATAmount),
-		TotalFees:           formatCurrency(*application.TotalCost),
+		InspectionFee:       formatCurrency(application.Tariff.InspectionFee, application.Tariff.Currency),
+		DevelopmentFee:      formatCurrency(*application.DevelopmentLevy, application.Tariff.Currency),
+		VATAmount:           formatCurrency(*application.VATAmount, application.Tariff.Currency),
+		TotalFees:           formatCurrency(*application.TotalCost, application.Tariff.Currency),
 	}, nil
 }
 
@@ -176,26 +175,6 @@ func createVictoriaFallsPlaceholderLogo() string {
             </svg>`
 
 	return "data:image/svg+xml;base64," + base64.StdEncoding.EncodeToString([]byte(svg))
-}
-
-// formatCurrency formats decimal to currency string
-func formatCurrency(amount decimal.Decimal) string {
-	amountStr := amount.StringFixed(2)
-	parts := strings.Split(amountStr, ".")
-	intPart := parts[0]
-
-	var formattedInt string
-	for i, c := range reverseString(intPart) {
-		if i > 0 && i%3 == 0 {
-			formattedInt = "," + formattedInt
-		}
-		formattedInt = string(c) + formattedInt
-	}
-
-	if len(parts) > 1 {
-		return formattedInt + "." + parts[1]
-	}
-	return formattedInt
 }
 
 func reverseString(s string) string {

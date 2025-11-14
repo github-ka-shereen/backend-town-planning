@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      @page {
+        size: A4 portrait;
+        margin: 15mm;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 12pt;
+        color: #000;
+        line-height: 1.4;
+      }
+
+      /* Header Section */
+      .header-container {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 15pt;
+        border-bottom: 2px solid #000;
+        padding-bottom: 10pt;
+      }
+
+      .header-left {
+        flex: 1;
+        font-size: 10pt;
+        line-height: 1.3;
+      }
+
+      .header-center {
+        flex: 2;
+        text-align: center;
+      }
+
+      .logo {
+        width: 70pt;
+        height: 70pt;
+        margin: 0 auto 5pt;
+      }
+
+      .logo img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+
+      .municipality-name {
+        font-weight: bold;
+        text-transform: uppercase;
+        font-size: 14pt;
+        margin-bottom: 3pt;
+      }
+
+      .document-title {
+        font-weight: bold;
+        font-size: 16pt;
+        text-transform: uppercase;
+        margin-top: 5pt;
+      }
+
+      .header-right {
+        flex: 1;
+        text-align: right;
+        font-size: 10pt;
+        line-height: 1.3;
+      }
+
+      /* Main Content */
+      .content-section {
+        margin: 15pt 0;
+      }
+
+      .section-title {
+        font-weight: bold;
+        font-size: 12pt;
+        margin-bottom: 8pt;
+        text-decoration: underline;
+      }
+
+      /* Property Information */
+      .property-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 8pt;
+        margin: 10pt 0;
+        font-size: 11pt;
+      }
+
+      .property-item {
+        display: flex;
+        flex-direction: column;
+      }
+
+      .property-label {
+        font-weight: bold;
+        margin-bottom: 2pt;
+      }
+
+      .property-value {
+        border-bottom: 1px solid #000;
+        padding: 3pt 0;
+        min-height: 20pt;
+      }
+
+      /* Conditions List */
+      .conditions-list {
+        margin: 10pt 0;
+        padding-left: 20pt;
+      }
+
+      .condition-item {
+        margin-bottom: 6pt;
+        text-align: justify;
+      }
+
+      /* Signature Section */
+      .signature-section {
+        margin-top: 30pt;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+      }
+
+      .signature-left {
+        flex: 1;
+      }
+
+      .signature-box {
+        margin-top: 40pt;
+        text-align: center;
+      }
+
+      .signature-line {
+        border-top: 1px solid #000;
+        width: 200pt;
+        margin: 0 auto;
+        padding-top: 3pt;
+      }
+
+      .signature-name {
+        font-weight: bold;
+        margin-top: 5pt;
+      }
+
+      .signature-title {
+        font-size: 10pt;
+        margin-top: 2pt;
+      }
+
+      .signature-image {
+        max-width: 150pt;
+        max-height: 50pt;
+        margin-bottom: 5pt;
+      }
+
+      .stamp-box {
+        flex: 1;
+        text-align: center;
+        border: 2px solid #000;
+        padding: 15pt;
+        height: 120pt;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .stamp-title {
+        font-weight: bold;
+        font-size: 8pt;
+        margin-bottom: 2pt;
+        text-transform: uppercase;
+        margin-top: 8pt; /* Added top margin to position at top */
+      }
+
+      /* Legal Notice */
+      .legal-notice {
+        margin-top: 20pt;
+        font-size: 10pt;
+        text-align: justify;
+        line-height: 1.3;
+        border-top: 1px solid #000;
+        padding-top: 10pt;
+      }
+
+      /* Page Break Handling */
+      .page-break {
+        page-break-before: always;
+      }
+
+      /* Table styling for better alignment */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 8pt 0;
+      }
+
+      table td {
+        padding: 4pt 8pt;
+        vertical-align: top;
+      }
+
+      table .label {
+        font-weight: bold;
+        width: 40%;
+      }
+
+      table .value {
+        border-bottom: 1px solid #000;
+      }
+
+      /* Financial Information */
+      .financial-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 8pt;
+        margin: 10pt 0;
+      }
+
+      .financial-item {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 1px solid #000;
+        padding: 4pt 0;
+      }
+
+      .financial-label {
+        font-weight: bold;
+      }
+
+      .financial-value {
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Header -->
+    <div class="header-container">
+      <div class="header-left">
+        Municipality of Redcliff<br />
+        P O BOX 187<br />
+        REDCLIFF
+      </div>
+
+      <div class="header-center">
+        <div class="logo">
+          <img src="/logo" alt="Municipality of Redcliff Logo" />
+        </div>
+        <div class="municipality-name">Municipality of Redcliff</div>
+        <div class="document-title">Development Permit</div>
+        <div style="font-size: 10pt; margin-top: 3pt">
+          REGIONAL, TOWN AND COUNTRY PLANNING ACT, 1996 (SECTION 26)
+        </div>
+      </div>
+
+      <div class="header-right">
+        Tel: +263-55-212221, +263-772-345-678<br />
+        +263-83-284 3531-3<br />
+        Fax: +263-83-284 4308/40253<br />
+        E-mail:redcliff@redcliffmunicipality.org.zw<br />
+        Website: www.redcliffmunicipality.co.zw
+      </div>
+    </div>
+
+    <!-- Property Information -->
+    <div class="content-section">
+      <div class="section-title">PROPERTY INFORMATION</div>
+
+      <table>
+        <tr>
+          <td class="label">STAND NUMBER:</td>
+          <td class="value">{{.StandNumber}}</td>
+        </tr>
+        <tr>
+          <td class="label">PERMIT NO:</td>
+          <td class="value">{{.PermitNumber}}</td>
+        </tr>
+        <tr>
+          <td class="label">ISSUED ON:</td>
+          <td class="value">{{.PermitGenerationDate}}</td>
+        </tr>
+        <tr>
+          <td class="label">APPLIED ON:</td>
+          <td class="value">{{.SubmissionDate}}</td>
+        </tr>
+        <tr>
+          <td class="label">PERMIT TO:</td>
+          <td class="value">{{.ApplicantName}}</td>
+        </tr>
+        <tr>
+          <td class="label">APPLICANT ADDRESS:</td>
+          <td class="value">{{.ApplicantAddress}}, {{.ApplicantCity}}</td>
+        </tr>
+      </table>
+    </div>
+
+    <!-- Development Details -->
+    <div class="content-section">
+      <div class="section-title">DEVELOPMENT DETAILS</div>
+
+      <div class="property-grid">
+        <div class="property-item">
+          <div class="property-label">PLAN NUMBER:</div>
+          <div class="property-value">{{.PlanNumber}}</div>
+        </div>
+        <div class="property-item">
+          <div class="property-label">PERMIT TYPE:</div>
+          <div class="property-value">{{.DevelopmentCategory}}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Permit Granting Section -->
+    <div class="content-section">
+      <p style="text-align: justify; margin-bottom: 10pt">
+        a. The Municipality of Redcliff, in its capacity as Local Planning
+        Authority hereby grants a <strong>DEVELOPMENT PERMIT</strong> in respect
+        of the application and authorizing construction on stand number
+        {{.StandNumber}} of the building(s) shown on the plans submitted and
+        forming part of the above-mentioned application.
+      </p>
+
+      <p style="text-align: justify; margin-bottom: 10pt">
+        b. The permit is granted subject to the under-mentioned conditions:
+      </p>
+
+      <div class="conditions-list">
+        {{range $index, $condition := .Conditions}}
+        <div class="condition-item">{{$index | add1}}. {{$condition}}</div>
+        {{end}}
+      </div>
+    </div>
+
+    <!-- Signature and Stamp Section -->
+    <div class="signature-section">
+      <div class="signature-left">
+        <div class="signature-box">
+          {{if .GeneratedBySignature}}
+          <img src="/signature" alt="Signature" class="signature-image" />
+          {{else}}
+          <div class="signature-line"></div>
+          {{end}}
+          <div class="signature-name">{{.GeneratedByName}}</div>
+          <div class="signature-title">{{.GeneratedByTitle}}</div>
+          <div class="signature-title">Municipality of Redcliff</div>
+        </div>
+      </div>
+
+      {{if .StampSpace}}
+      <!-- Stamp box with text at top -->
+      <div class="stamp-box">
+        <div class="stamp-title">OFFICIAL STAMP</div>
+        <!-- Empty space below for the actual stamp -->
+      </div>
+    </div>
+    {{end}}
+
+    <!-- Legal Notice -->
+    <div class="legal-notice">{{.LegalNotice}}</div>
+
+    <!-- Footer -->
+    <div
+      style="
+        margin-top: 20pt;
+        font-size: 9pt;
+        text-align: center;
+        border-top: 1px solid #000;
+        padding-top: 8pt;
+      "
+    >
+      Document Generated on: {{.PrintDate}} | This is an electronically
+      generated document
+    </div>
+  </body>
+</html>
